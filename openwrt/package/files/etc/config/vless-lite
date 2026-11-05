@@ -1,0 +1,4 @@
+config service 'main'
+	option boot '0'
+	option resolver '1.1.1.1'
+

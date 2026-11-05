@@ -1,0 +1,15 @@
+{
+  "admin/services/vless-lite": {
+    "title": "VLESS Lite",
+    "order": 55,
+    "action": {
+      "type": "view",
+      "path": "vless-lite/settings"
+    },
+    "depends": {
+      "acl": [
+        "luci-app-vless-lite"
+      ]
+    }
+  }
+}

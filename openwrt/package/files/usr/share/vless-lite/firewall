@@ -1,0 +1,48 @@
+#!/bin/sh
+set -eu
+
+case "${1:-}" in
+remove)
+	if nft list table inet vless_lite >/dev/null 2>&1; then
+		nft delete table inet vless_lite
+	fi
+	;;
+apply)
+	for setting in flow_offloading flow_offloading_hw; do
+		if [ "$(uci -q get "firewall.@defaults[0].$setting")" = 1 ]; then
+			echo 'Disable firewall flow offloading before connecting VLESS Lite' >&2
+			exit 1
+		fi
+	done
+	nft -f - <<'NFT'
+add table inet vless_lite
+delete table inet vless_lite
+table inet vless_lite {
+	chain capture {
+		type nat hook prerouting priority -105; policy accept;
+		iifname != "br-lan" return
+		meta nfproto ipv6 return
+		udp dport 53 redirect to :1053
+		tcp dport 53 redirect to :1053
+		fib daddr type local return
+		ip daddr { 0.0.0.0/8, 10.0.0.0/8, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16, 224.0.0.0/3 } return
+		meta l4proto tcp redirect to :12345
+	}
+	chain protect {
+		type filter hook input priority -10; policy accept;
+		iifname "lo" return
+		iifname "br-lan" meta nfproto ipv4 ct status dnat return
+		tcp dport { 1053, 12345 } drop
+		udp dport 1053 drop
+		iifname "br-lan" meta nfproto ipv6 meta l4proto { tcp, udp } th dport 53 drop
+	}
+	chain prevent_bypass {
+		type filter hook forward priority -10; policy accept;
+		iifname "br-lan" drop
+	}
+}
+NFT
+	;;
+*) exit 2 ;;
+esac
+

@@ -1,0 +1,28 @@
+{
+  "luci-app-vless-lite": {
+    "description": "Manage VLESS Lite",
+    "read": {
+      "uci": [
+        "vless-lite"
+      ],
+      "ubus": {
+        "vless-lite": [
+          "status",
+          "logs"
+        ]
+      }
+    },
+    "write": {
+      "uci": [
+        "vless-lite"
+      ],
+      "ubus": {
+        "vless-lite": [
+          "connect",
+          "disconnect",
+          "probe"
+        ]
+      }
+    }
+  }
+}

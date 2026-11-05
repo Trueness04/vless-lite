@@ -1,0 +1,68 @@
+#!/bin/sh /etc/rc.common
+START=99
+STOP=10
+USE_PROCD=1
+extra_command "connect" "Validate and activate the selected profile"
+
+boot() {
+	config_load vless-lite
+	config_get_bool autoboot main boot 0
+	[ "$autoboot" = 0 ] || connect
+}
+
+prepare_config() {
+	config_load vless-lite
+	config_get active main active
+	config_get resolver main resolver 1.1.1.1
+	config_get rules main rules
+	case "$active" in ''|*[!a-zA-Z0-9_]*) return 1 ;; esac
+	[ "$(uci -q get "vless-lite.$active")" = profile ] || return 1
+	config_get link "$active" link
+
+	umask 077
+	mkdir -p /var/run/vless-lite || return 1
+	tmp=$(mktemp /var/run/vless-lite/config.XXXXXX) || return 1
+	if ! VLESS_LITE_LINK="$link" /usr/bin/xray-lite manager render /etc/vless-lite/config.json "$resolver" "$rules" > "$tmp" ||
+	   ! /usr/bin/xray-lite run -test -format json -config "$tmp" >/dev/null; then
+		rm -f "$tmp"
+		logger -t vless-lite 'Profile or routing configuration failed validation'
+		return 1
+	fi
+	if ! /usr/share/vless-lite/firewall apply; then
+		rm -f "$tmp"
+		logger -t vless-lite 'Could not install interception rules'
+		return 1
+	fi
+	config=/var/run/vless-lite/config.json
+	mv -f "$tmp" "$config"
+}
+
+connect() {
+	procd_lock
+	prepare_config || return 1
+	prepared=1
+	start
+}
+
+start_service() {
+	[ "${prepared:-0}" = 1 ] || {
+		config_load vless-lite
+		config_get_bool autoboot main boot 0
+		[ "$autoboot" = 1 ] || return 0
+		prepare_config || return 1
+	}
+	procd_open_instance
+	procd_set_param env GOGC=50 GOMEMLIMIT=24MiB
+	procd_set_param command /usr/bin/xray-lite run -config "$config"
+	procd_set_param file "$config"
+	procd_set_param data profile="$active"
+	procd_set_param respawn 3600 5 5
+	procd_set_param stdout 1
+	procd_set_param stderr 1
+	procd_close_instance
+}
+
+stop_service() {
+	/usr/share/vless-lite/firewall remove
+}
+

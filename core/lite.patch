@@ -1,0 +1,1991 @@
+diff --git a/app/proxyman/inbound/worker.go b/app/proxyman/inbound/worker.go
+index b91c9ec..269fb71 100644
+--- a/app/proxyman/inbound/worker.go
++++ b/app/proxyman/inbound/worker.go
+@@ -18,9 +18,7 @@ import (
+ 	"github.com/xtls/xray-core/features/routing"
+ 	"github.com/xtls/xray-core/features/stats"
+ 	"github.com/xtls/xray-core/proxy"
+-	hysteria_proxy "github.com/xtls/xray-core/proxy/hysteria"
+ 	"github.com/xtls/xray-core/transport/internet"
+-	"github.com/xtls/xray-core/transport/internet/hysteria"
+ 	"github.com/xtls/xray-core/transport/internet/stat"
+ 	"github.com/xtls/xray-core/transport/internet/tcp"
+ 	"github.com/xtls/xray-core/transport/internet/udp"
+@@ -134,10 +132,6 @@ func (w *tcpWorker) Proxy() proxy.Inbound {
+ func (w *tcpWorker) Start() error {
+ 	ctx := context.Background()
+ 
+-	if v, ok := w.proxy.(*hysteria_proxy.Server); ok {
+-		ctx = hysteria.ContextWithValidator(ctx, v.HysteriaInboundValidator())
+-	}
+-
+ 	hub, err := internet.ListenTCP(ctx, w.address, w.port, w.stream, func(conn stat.Connection) {
+ 		go w.callback(conn)
+ 	})
+diff --git a/infra/conf/api.go b/infra/conf/api.go
+deleted file mode 100644
+index dca3491..0000000
+--- a/infra/conf/api.go
++++ /dev/null
+@@ -1,50 +0,0 @@
+-package conf
+-
+-import (
+-	"strings"
+-
+-	"github.com/xtls/xray-core/app/commander"
+-	loggerservice "github.com/xtls/xray-core/app/log/command"
+-	observatoryservice "github.com/xtls/xray-core/app/observatory/command"
+-	handlerservice "github.com/xtls/xray-core/app/proxyman/command"
+-	routerservice "github.com/xtls/xray-core/app/router/command"
+-	statsservice "github.com/xtls/xray-core/app/stats/command"
+-	"github.com/xtls/xray-core/common/errors"
+-	"github.com/xtls/xray-core/common/serial"
+-)
+-
+-type APIConfig struct {
+-	Tag      string   `json:"tag"`
+-	Listen   string   `json:"listen"`
+-	Services []string `json:"services"`
+-}
+-
+-func (c *APIConfig) Build() (*commander.Config, error) {
+-	if c.Tag == "" {
+-		return nil, errors.New("API tag can't be empty.")
+-	}
+-
+-	services := make([]*serial.TypedMessage, 0, 16)
+-	for _, s := range c.Services {
+-		switch strings.ToLower(s) {
+-		case "reflectionservice":
+-			services = append(services, serial.ToTypedMessage(&commander.ReflectionConfig{}))
+-		case "handlerservice":
+-			services = append(services, serial.ToTypedMessage(&handlerservice.Config{}))
+-		case "loggerservice":
+-			services = append(services, serial.ToTypedMessage(&loggerservice.Config{}))
+-		case "statsservice":
+-			services = append(services, serial.ToTypedMessage(&statsservice.Config{}))
+-		case "observatoryservice":
+-			services = append(services, serial.ToTypedMessage(&observatoryservice.Config{}))
+-		case "routingservice":
+-			services = append(services, serial.ToTypedMessage(&routerservice.Config{}))
+-		}
+-	}
+-
+-	return &commander.Config{
+-		Tag:     c.Tag,
+-		Listen:  c.Listen,
+-		Service: services,
+-	}, nil
+-}
+diff --git a/infra/conf/grpc.go b/infra/conf/grpc.go
+deleted file mode 100644
+index 429186b..0000000
+--- a/infra/conf/grpc.go
++++ /dev/null
+@@ -1,41 +0,0 @@
+-package conf
+-
+-import (
+-	"github.com/xtls/xray-core/transport/internet/grpc"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-type GRPCConfig struct {
+-	Authority           string `json:"authority"`
+-	ServiceName         string `json:"serviceName"`
+-	MultiMode           bool   `json:"multiMode"`
+-	IdleTimeout         int32  `json:"idle_timeout"`
+-	HealthCheckTimeout  int32  `json:"health_check_timeout"`
+-	PermitWithoutStream bool   `json:"permit_without_stream"`
+-	InitialWindowsSize  int32  `json:"initial_windows_size"`
+-	UserAgent           string `json:"user_agent"`
+-}
+-
+-func (g *GRPCConfig) Build() (proto.Message, error) {
+-	if g.IdleTimeout <= 0 {
+-		g.IdleTimeout = 0
+-	}
+-	if g.HealthCheckTimeout <= 0 {
+-		g.HealthCheckTimeout = 0
+-	}
+-	if g.InitialWindowsSize < 0 {
+-		// default window size of gRPC-go
+-		g.InitialWindowsSize = 0
+-	}
+-
+-	return &grpc.Config{
+-		Authority:           g.Authority,
+-		ServiceName:         g.ServiceName,
+-		MultiMode:           g.MultiMode,
+-		IdleTimeout:         g.IdleTimeout,
+-		HealthCheckTimeout:  g.HealthCheckTimeout,
+-		PermitWithoutStream: g.PermitWithoutStream,
+-		InitialWindowsSize:  g.InitialWindowsSize,
+-		UserAgent:           g.UserAgent,
+-	}, nil
+-}
+diff --git a/infra/conf/hysteria.go b/infra/conf/hysteria.go
+deleted file mode 100644
+index 744338d..0000000
+--- a/infra/conf/hysteria.go
++++ /dev/null
+@@ -1,72 +0,0 @@
+-package conf
+-
+-import (
+-	"github.com/xtls/xray-core/common/errors"
+-	"github.com/xtls/xray-core/common/protocol"
+-	"github.com/xtls/xray-core/common/serial"
+-	"github.com/xtls/xray-core/common/task"
+-	"github.com/xtls/xray-core/proxy/hysteria"
+-	"github.com/xtls/xray-core/proxy/hysteria/account"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-type HysteriaClientConfig struct {
+-	Version int32    `json:"version"`
+-	Address *Address `json:"address"`
+-	Port    uint16   `json:"port"`
+-}
+-
+-func (c *HysteriaClientConfig) Build() (proto.Message, error) {
+-	if c.Version != 2 {
+-		return nil, errors.New("version != 2")
+-	}
+-
+-	config := &hysteria.ClientConfig{}
+-	config.Version = c.Version
+-	config.Server = &protocol.ServerEndpoint{
+-		Address: c.Address.Build(),
+-		Port:    uint32(c.Port),
+-	}
+-
+-	return config, nil
+-}
+-
+-type HysteriaUserConfig struct {
+-	Auth  string `json:"auth"`
+-	Level uint32 `json:"level"`
+-	Email string `json:"email"`
+-}
+-
+-type HysteriaServerConfig struct {
+-	Version int32                 `json:"version"`
+-	Users   []*HysteriaUserConfig `json:"users"`
+-	Clients []*HysteriaUserConfig `json:"clients"`
+-}
+-
+-func (c *HysteriaServerConfig) Build() (proto.Message, error) {
+-	config := new(hysteria.ServerConfig)
+-
+-	if c.Clients != nil {
+-		c.Users = c.Clients
+-	}
+-	if len(c.Users) > 0 {
+-		config.Users = make([]*protocol.User, len(c.Users))
+-		processUser := func(idx int) error {
+-			user := c.Users[idx]
+-			acc := &account.Account{
+-				Auth: user.Auth,
+-			}
+-			config.Users[idx] = &protocol.User{
+-				Email:   user.Email,
+-				Level:   user.Level,
+-				Account: serial.ToTypedMessage(acc),
+-			}
+-			return nil
+-		}
+-		if err := task.ParallelForN(len(c.Users), processUser); err != nil {
+-			return nil, err
+-		}
+-	}
+-
+-	return config, nil
+-}
+diff --git a/infra/conf/loopback.go b/infra/conf/loopback.go
+deleted file mode 100644
+index 87d349c..0000000
+--- a/infra/conf/loopback.go
++++ /dev/null
+@@ -1,14 +0,0 @@
+-package conf
+-
+-import (
+-	"github.com/xtls/xray-core/proxy/loopback"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-type LoopbackConfig struct {
+-	InboundTag string `json:"inboundTag"`
+-}
+-
+-func (l LoopbackConfig) Build() (proto.Message, error) {
+-	return &loopback.Config{InboundTag: l.InboundTag}, nil
+-}
+diff --git a/infra/conf/metrics.go b/infra/conf/metrics.go
+deleted file mode 100644
+index 7596520..0000000
+--- a/infra/conf/metrics.go
++++ /dev/null
+@@ -1,26 +0,0 @@
+-package conf
+-
+-import (
+-	"github.com/xtls/xray-core/app/metrics"
+-	"github.com/xtls/xray-core/common/errors"
+-)
+-
+-type MetricsConfig struct {
+-	Tag    string `json:"tag"`
+-	Listen string `json:"listen"`
+-}
+-
+-func (c *MetricsConfig) Build() (*metrics.Config, error) {
+-	if c.Listen == "" && c.Tag == "" {
+-		return nil, errors.New("Metrics must have a tag or listen address.")
+-	}
+-	// If the tag is empty but have "listen" set a default "Metrics" for compatibility.
+-	if c.Tag == "" {
+-		c.Tag = "Metrics"
+-	}
+-
+-	return &metrics.Config{
+-		Tag:    c.Tag,
+-		Listen: c.Listen,
+-	}, nil
+-}
+diff --git a/infra/conf/observatory.go b/infra/conf/observatory.go
+deleted file mode 100644
+index 62d6aab..0000000
+--- a/infra/conf/observatory.go
++++ /dev/null
+@@ -1,38 +0,0 @@
+-package conf
+-
+-import (
+-	"google.golang.org/protobuf/proto"
+-
+-	"github.com/xtls/xray-core/app/observatory"
+-	"github.com/xtls/xray-core/app/observatory/burst"
+-	"github.com/xtls/xray-core/common/errors"
+-	"github.com/xtls/xray-core/infra/conf/cfgcommon/duration"
+-)
+-
+-type ObservatoryConfig struct {
+-	SubjectSelector   []string          `json:"subjectSelector"`
+-	ProbeURL          string            `json:"probeURL"`
+-	ProbeInterval     duration.Duration `json:"probeInterval"`
+-	EnableConcurrency bool              `json:"enableConcurrency"`
+-}
+-
+-func (o *ObservatoryConfig) Build() (proto.Message, error) {
+-	return &observatory.Config{SubjectSelector: o.SubjectSelector, ProbeUrl: o.ProbeURL, ProbeInterval: int64(o.ProbeInterval), EnableConcurrency: o.EnableConcurrency}, nil
+-}
+-
+-type BurstObservatoryConfig struct {
+-	SubjectSelector []string `json:"subjectSelector"`
+-	// health check settings
+-	HealthCheck *healthCheckSettings `json:"pingConfig,omitempty"`
+-}
+-
+-func (b BurstObservatoryConfig) Build() (proto.Message, error) {
+-	if b.HealthCheck == nil {
+-		return nil, errors.New("BurstObservatory requires a valid pingConfig")
+-	}
+-	if result, err := b.HealthCheck.Build(); err == nil {
+-		return &burst.Config{SubjectSelector: b.SubjectSelector, PingConfig: result.(*burst.HealthPingConfig)}, nil
+-	} else {
+-		return nil, err
+-	}
+-}
+diff --git a/infra/conf/reverse.go b/infra/conf/reverse.go
+deleted file mode 100644
+index f44c999..0000000
+--- a/infra/conf/reverse.go
++++ /dev/null
+@@ -1,56 +0,0 @@
+-package conf
+-
+-import (
+-	"github.com/xtls/xray-core/app/reverse"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-type BridgeConfig struct {
+-	Tag    string `json:"tag"`
+-	Domain string `json:"domain"`
+-}
+-
+-func (c *BridgeConfig) Build() (*reverse.BridgeConfig, error) {
+-	return &reverse.BridgeConfig{
+-		Tag:    c.Tag,
+-		Domain: c.Domain,
+-	}, nil
+-}
+-
+-type PortalConfig struct {
+-	Tag    string `json:"tag"`
+-	Domain string `json:"domain"`
+-}
+-
+-func (c *PortalConfig) Build() (*reverse.PortalConfig, error) {
+-	return &reverse.PortalConfig{
+-		Tag:    c.Tag,
+-		Domain: c.Domain,
+-	}, nil
+-}
+-
+-type ReverseConfig struct {
+-	Bridges []BridgeConfig `json:"bridges"`
+-	Portals []PortalConfig `json:"portals"`
+-}
+-
+-func (c *ReverseConfig) Build() (proto.Message, error) {
+-	config := &reverse.Config{}
+-	for _, bconfig := range c.Bridges {
+-		b, err := bconfig.Build()
+-		if err != nil {
+-			return nil, err
+-		}
+-		config.BridgeConfig = append(config.BridgeConfig, b)
+-	}
+-
+-	for _, pconfig := range c.Portals {
+-		p, err := pconfig.Build()
+-		if err != nil {
+-			return nil, err
+-		}
+-		config.PortalConfig = append(config.PortalConfig, p)
+-	}
+-
+-	return config, nil
+-}
+diff --git a/infra/conf/shadowsocks.go b/infra/conf/shadowsocks.go
+deleted file mode 100644
+index 30a7fd6..0000000
+--- a/infra/conf/shadowsocks.go
++++ /dev/null
+@@ -1,286 +0,0 @@
+-package conf
+-
+-import (
+-	"strings"
+-
+-	"github.com/sagernet/sing-shadowsocks/shadowaead_2022"
+-	C "github.com/sagernet/sing/common"
+-	"github.com/xtls/xray-core/common/errors"
+-	"github.com/xtls/xray-core/common/protocol"
+-	"github.com/xtls/xray-core/common/serial"
+-	"github.com/xtls/xray-core/common/task"
+-	"github.com/xtls/xray-core/proxy/shadowsocks"
+-	"github.com/xtls/xray-core/proxy/shadowsocks_2022"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-func cipherFromString(c string) shadowsocks.CipherType {
+-	switch strings.ToLower(c) {
+-	case "aes-128-gcm", "aead_aes_128_gcm":
+-		return shadowsocks.CipherType_AES_128_GCM
+-	case "aes-256-gcm", "aead_aes_256_gcm":
+-		return shadowsocks.CipherType_AES_256_GCM
+-	case "chacha20-poly1305", "aead_chacha20_poly1305", "chacha20-ietf-poly1305":
+-		return shadowsocks.CipherType_CHACHA20_POLY1305
+-	case "xchacha20-poly1305", "aead_xchacha20_poly1305", "xchacha20-ietf-poly1305":
+-		return shadowsocks.CipherType_XCHACHA20_POLY1305
+-	case "none", "plain":
+-		return shadowsocks.CipherType_NONE
+-	default:
+-		return shadowsocks.CipherType_UNKNOWN
+-	}
+-}
+-
+-type ShadowsocksUserConfig struct {
+-	Cipher   string   `json:"method"`
+-	Password string   `json:"password"`
+-	Level    byte     `json:"level"`
+-	Email    string   `json:"email"`
+-	Address  *Address `json:"address"`
+-	Port     uint16   `json:"port"`
+-}
+-
+-type ShadowsocksServerConfig struct {
+-	Cipher      string                   `json:"method"`
+-	Password    string                   `json:"password"`
+-	Level       byte                     `json:"level"`
+-	Email       string                   `json:"email"`
+-	Users       []*ShadowsocksUserConfig `json:"users"`
+-	Clients     []*ShadowsocksUserConfig `json:"clients"`
+-	NetworkList *NetworkList             `json:"network"`
+-}
+-
+-func (v *ShadowsocksServerConfig) Build() (proto.Message, error) {
+-	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
+-
+-	if v.Clients != nil {
+-		v.Users = v.Clients
+-	}
+-
+-	if C.Contains(shadowaead_2022.List, v.Cipher) {
+-		return buildShadowsocks2022(v)
+-	}
+-
+-	config := new(shadowsocks.ServerConfig)
+-	config.Network = v.NetworkList.Build()
+-
+-	if v.Users != nil {
+-		if len(v.Users) > 0 {
+-			config.Users = make([]*protocol.User, len(v.Users))
+-			processUser := func(idx int) error {
+-				user := v.Users[idx]
+-				account := &shadowsocks.Account{
+-					Password:   user.Password,
+-					CipherType: cipherFromString(user.Cipher),
+-				}
+-				if account.Password == "" {
+-					return errors.New("Shadowsocks password is not specified.")
+-				}
+-				if account.CipherType < shadowsocks.CipherType_AES_128_GCM ||
+-					account.CipherType > shadowsocks.CipherType_XCHACHA20_POLY1305 {
+-					return errors.New("unsupported cipher method: ", user.Cipher)
+-				}
+-				config.Users[idx] = &protocol.User{
+-					Email:   user.Email,
+-					Level:   uint32(user.Level),
+-					Account: serial.ToTypedMessage(account),
+-				}
+-				return nil
+-			}
+-			if err := task.ParallelForN(len(v.Users), processUser); err != nil {
+-				return nil, err
+-			}
+-		}
+-	} else {
+-		account := &shadowsocks.Account{
+-			Password:   v.Password,
+-			CipherType: cipherFromString(v.Cipher),
+-		}
+-		if account.Password == "" {
+-			return nil, errors.New("Shadowsocks password is not specified.")
+-		}
+-		if account.CipherType == shadowsocks.CipherType_UNKNOWN {
+-			return nil, errors.New("unknown cipher method: ", v.Cipher)
+-		}
+-		config.Users = append(config.Users, &protocol.User{
+-			Email:   v.Email,
+-			Level:   uint32(v.Level),
+-			Account: serial.ToTypedMessage(account),
+-		})
+-	}
+-
+-	return config, nil
+-}
+-
+-func buildShadowsocks2022(v *ShadowsocksServerConfig) (proto.Message, error) {
+-	if len(v.Users) == 0 {
+-		config := new(shadowsocks_2022.ServerConfig)
+-		config.Method = v.Cipher
+-		config.Key = v.Password
+-		config.Network = v.NetworkList.Build()
+-		config.Email = v.Email
+-		return config, nil
+-	}
+-
+-	if v.Cipher == "" {
+-		return nil, errors.New("shadowsocks 2022 (multi-user): missing server method")
+-	}
+-	if !strings.Contains(v.Cipher, "aes") {
+-		return nil, errors.New("shadowsocks 2022 (multi-user): only blake3-aes-*-gcm methods are supported")
+-	}
+-
+-	if v.Users[0].Address == nil {
+-		config := new(shadowsocks_2022.MultiUserServerConfig)
+-		config.Method = v.Cipher
+-		config.Key = v.Password
+-		config.Network = v.NetworkList.Build()
+-
+-		config.Users = make([]*protocol.User, len(v.Users))
+-		processUser := func(idx int) error {
+-			user := v.Users[idx]
+-			if user.Cipher != "" {
+-				return errors.New("shadowsocks 2022 (multi-user): users must have empty method")
+-			}
+-			account := &shadowsocks_2022.Account{
+-				Key: user.Password,
+-			}
+-			config.Users[idx] = &protocol.User{
+-				Email:   user.Email,
+-				Level:   uint32(user.Level),
+-				Account: serial.ToTypedMessage(account),
+-			}
+-			return nil
+-		}
+-		if err := task.ParallelForN(len(v.Users), processUser); err != nil {
+-			return nil, err
+-		}
+-		return config, nil
+-	}
+-
+-	config := new(shadowsocks_2022.RelayServerConfig)
+-	config.Method = v.Cipher
+-	config.Key = v.Password
+-	config.Network = v.NetworkList.Build()
+-	for _, user := range v.Users {
+-		if user.Cipher != "" {
+-			return nil, errors.New("shadowsocks 2022 (relay): users must have empty method")
+-		}
+-		if user.Address == nil {
+-			return nil, errors.New("shadowsocks 2022 (relay): all users must have relay address")
+-		}
+-		config.Destinations = append(config.Destinations, &shadowsocks_2022.RelayDestination{
+-			Key:     user.Password,
+-			Email:   user.Email,
+-			Address: user.Address.Build(),
+-			Port:    uint32(user.Port),
+-		})
+-	}
+-	return config, nil
+-}
+-
+-type ShadowsocksServerTarget struct {
+-	Address    *Address `json:"address"`
+-	Port       uint16   `json:"port"`
+-	Level      byte     `json:"level"`
+-	Email      string   `json:"email"`
+-	Cipher     string   `json:"method"`
+-	Password   string   `json:"password"`
+-	UoT        bool     `json:"uot"`
+-	UoTVersion int      `json:"uotVersion"`
+-}
+-
+-type ShadowsocksClientConfig struct {
+-	Address    *Address                   `json:"address"`
+-	Port       uint16                     `json:"port"`
+-	Level      byte                       `json:"level"`
+-	Email      string                     `json:"email"`
+-	Cipher     string                     `json:"method"`
+-	Password   string                     `json:"password"`
+-	UoT        bool                       `json:"uot"`
+-	UoTVersion int                        `json:"uotVersion"`
+-	Servers    []*ShadowsocksServerTarget `json:"servers"`
+-}
+-
+-func (v *ShadowsocksClientConfig) Build() (proto.Message, error) {
+-	errors.PrintNonRemovalDeprecatedFeatureWarning("Shadowsocks (with no Forward Secrecy, etc.)", "VLESS Encryption")
+-
+-	if v.Address != nil {
+-		v.Servers = []*ShadowsocksServerTarget{
+-			{
+-				Address:    v.Address,
+-				Port:       v.Port,
+-				Level:      v.Level,
+-				Email:      v.Email,
+-				Cipher:     v.Cipher,
+-				Password:   v.Password,
+-				UoT:        v.UoT,
+-				UoTVersion: v.UoTVersion,
+-			},
+-		}
+-	}
+-	if len(v.Servers) != 1 {
+-		return nil, errors.New(`Shadowsocks settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple Shadowsocks outbounds and routing balancer instead`)
+-	}
+-
+-	if len(v.Servers) == 1 {
+-		server := v.Servers[0]
+-		if C.Contains(shadowaead_2022.List, server.Cipher) {
+-			if server.Address == nil {
+-				return nil, errors.New("Shadowsocks server address is not set.")
+-			}
+-			if server.Port == 0 {
+-				return nil, errors.New("Invalid Shadowsocks port.")
+-			}
+-			if server.Password == "" {
+-				return nil, errors.New("Shadowsocks password is not specified.")
+-			}
+-
+-			config := new(shadowsocks_2022.ClientConfig)
+-			config.Address = server.Address.Build()
+-			config.Port = uint32(server.Port)
+-			config.Method = server.Cipher
+-			config.Key = server.Password
+-			config.UdpOverTcp = server.UoT
+-			config.UdpOverTcpVersion = uint32(server.UoTVersion)
+-			return config, nil
+-		}
+-	}
+-
+-	config := new(shadowsocks.ClientConfig)
+-	for _, server := range v.Servers {
+-		if C.Contains(shadowaead_2022.List, server.Cipher) {
+-			return nil, errors.New("Shadowsocks 2022 accept no multi servers")
+-		}
+-		if server.Address == nil {
+-			return nil, errors.New("Shadowsocks server address is not set.")
+-		}
+-		if server.Port == 0 {
+-			return nil, errors.New("Invalid Shadowsocks port.")
+-		}
+-		if server.Password == "" {
+-			return nil, errors.New("Shadowsocks password is not specified.")
+-		}
+-		account := &shadowsocks.Account{
+-			Password: server.Password,
+-		}
+-		account.CipherType = cipherFromString(server.Cipher)
+-		if account.CipherType == shadowsocks.CipherType_UNKNOWN {
+-			return nil, errors.New("unknown cipher method: ", server.Cipher)
+-		}
+-
+-		ss := &protocol.ServerEndpoint{
+-			Address: server.Address.Build(),
+-			Port:    uint32(server.Port),
+-			User: &protocol.User{
+-				Level:   uint32(server.Level),
+-				Email:   server.Email,
+-				Account: serial.ToTypedMessage(account),
+-			},
+-		}
+-
+-		config.Server = ss
+-		break
+-	}
+-
+-	return config, nil
+-}
+diff --git a/infra/conf/transport_internet.go b/infra/conf/transport_internet.go
+index 7a86a08..92d9826 100644
+--- a/infra/conf/transport_internet.go
++++ b/infra/conf/transport_internet.go
+@@ -16,7 +16,6 @@ import (
+ 	"syscall"
+ 	"time"
+ 
+-	"github.com/xtls/xray-core/common"
+ 	"github.com/xtls/xray-core/common/errors"
+ 	"github.com/xtls/xray-core/common/net"
+ 	"github.com/xtls/xray-core/common/platform/filesystem"
+@@ -33,15 +32,11 @@ import (
+ 	finalsudoku "github.com/xtls/xray-core/transport/internet/finalmask/sudoku"
+ 	"github.com/xtls/xray-core/transport/internet/finalmask/xdns"
+ 	"github.com/xtls/xray-core/transport/internet/finalmask/xicmp"
+-	"github.com/xtls/xray-core/transport/internet/httpupgrade"
+-	"github.com/xtls/xray-core/transport/internet/hysteria"
+ 	"github.com/xtls/xray-core/transport/internet/hysteria/congestion/bbr"
+-	"github.com/xtls/xray-core/transport/internet/kcp"
+ 	"github.com/xtls/xray-core/transport/internet/reality"
+ 	"github.com/xtls/xray-core/transport/internet/splithttp"
+ 	"github.com/xtls/xray-core/transport/internet/tcp"
+ 	"github.com/xtls/xray-core/transport/internet/tls"
+-	"github.com/xtls/xray-core/transport/internet/websocket"
+ 	"google.golang.org/protobuf/proto"
+ )
+ 
+@@ -50,60 +45,7 @@ var tcpHeaderLoader = NewJSONConfigLoader(ConfigCreatorCache{
+ 	"http": func() interface{} { return new(Authenticator) },
+ }, "type", "")
+ 
+-type KCPConfig struct {
+-	Mtu              *uint32 `json:"mtu"`
+-	Tti              *uint32 `json:"tti"`
+-	UpCap            *uint32 `json:"uplinkCapacity"`
+-	DownCap          *uint32 `json:"downlinkCapacity"`
+-	CwndMultiplier   *uint32 `json:"cwndMultiplier"`
+-	MaxSendingWindow *uint32 `json:"maxSendingWindow"`
+-
+-	HeaderConfig json.RawMessage `json:"header"`
+-	Seed         *string         `json:"seed"`
+-}
+-
+ // Build implements Buildable.
+-func (c *KCPConfig) Build() (proto.Message, error) {
+-	if c.HeaderConfig != nil || c.Seed != nil {
+-		return nil, errors.PrintRemovedFeatureError("mkcp header & seed", "finalmask/udp header-* & mkcp-original & mkcp-aes128gcm")
+-	}
+-
+-	config := common.Must2(internet.CreateTransportConfig(kcp.ProtocolName)).(*kcp.Config)
+-
+-	if c.Mtu != nil {
+-		config.Mtu = *c.Mtu
+-	}
+-	if c.Tti != nil {
+-		config.Tti = *c.Tti
+-	}
+-	if c.UpCap != nil {
+-		config.UplinkCapacity = *c.UpCap
+-	}
+-	if c.DownCap != nil {
+-		config.DownlinkCapacity = *c.DownCap
+-	}
+-	if c.CwndMultiplier != nil {
+-		config.CwndMultiplier = *c.CwndMultiplier
+-	}
+-	if c.MaxSendingWindow != nil {
+-		config.MaxSendingWindow = *c.MaxSendingWindow
+-	}
+-
+-	if config.Mtu < 21 {
+-		return nil, errors.New("Mtu must be at least 21").AtError()
+-	}
+-	if config.Tti < 10 || config.Tti > 1000 {
+-		return nil, errors.New("invalid mKCP TTI: ", c.Tti).AtError()
+-	}
+-	if config.CwndMultiplier < 1 {
+-		return nil, errors.New("CwndMultiplier must be at least 1").AtError()
+-	}
+-	if config.GetSendingBufferSize() == 0 {
+-		return nil, errors.New("MaxSendingWindow must be >= Mtu").AtError()
+-	}
+-
+-	return config, nil
+-}
+ 
+ type TCPConfig struct {
+ 	HeaderConfig        json.RawMessage `json:"header"`
+@@ -130,83 +72,9 @@ func (c *TCPConfig) Build() (proto.Message, error) {
+ 	return config, nil
+ }
+ 
+-type WebSocketConfig struct {
+-	Host                string            `json:"host"`
+-	Path                string            `json:"path"`
+-	Headers             map[string]string `json:"headers"`
+-	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
+-	HeartbeatPeriod     uint32            `json:"heartbeatPeriod"`
+-}
+-
+ // Build implements Buildable.
+-func (c *WebSocketConfig) Build() (proto.Message, error) {
+-	path := c.Path
+-	var ed uint32
+-	if u, err := url.Parse(path); err == nil {
+-		if q := u.Query(); q.Get("ed") != "" {
+-			Ed, _ := strconv.Atoi(q.Get("ed"))
+-			ed = uint32(Ed)
+-			q.Del("ed")
+-			u.RawQuery = q.Encode()
+-			path = u.String()
+-		}
+-	}
+-	// Priority (client): host > serverName > address
+-	for k, v := range c.Headers {
+-		if strings.ToLower(k) == "host" {
+-			errors.PrintDeprecatedFeatureWarning(`"host" in "headers"`, `independent "host"`)
+-			if c.Host == "" {
+-				c.Host = v
+-			}
+-			delete(c.Headers, k)
+-		}
+-	}
+-	config := &websocket.Config{
+-		Path:                path,
+-		Host:                c.Host,
+-		Header:              c.Headers,
+-		AcceptProxyProtocol: c.AcceptProxyProtocol,
+-		Ed:                  ed,
+-		HeartbeatPeriod:     c.HeartbeatPeriod,
+-	}
+-	return config, nil
+-}
+-
+-type HttpUpgradeConfig struct {
+-	Host                string            `json:"host"`
+-	Path                string            `json:"path"`
+-	Headers             map[string]string `json:"headers"`
+-	AcceptProxyProtocol bool              `json:"acceptProxyProtocol"`
+-}
+ 
+ // Build implements Buildable.
+-func (c *HttpUpgradeConfig) Build() (proto.Message, error) {
+-	path := c.Path
+-	var ed uint32
+-	if u, err := url.Parse(path); err == nil {
+-		if q := u.Query(); q.Get("ed") != "" {
+-			Ed, _ := strconv.Atoi(q.Get("ed"))
+-			ed = uint32(Ed)
+-			q.Del("ed")
+-			u.RawQuery = q.Encode()
+-			path = u.String()
+-		}
+-	}
+-	// Priority (client): host > serverName > address
+-	for k := range c.Headers {
+-		if strings.ToLower(k) == "host" {
+-			return nil, errors.New(`"headers" can't contain "host"`)
+-		}
+-	}
+-	config := &httpupgrade.Config{
+-		Path:                path,
+-		Host:                c.Host,
+-		Header:              c.Headers,
+-		AcceptProxyProtocol: c.AcceptProxyProtocol,
+-		Ed:                  ed,
+-	}
+-	return config, nil
+-}
+ 
+ type SplitHTTPConfig struct {
+ 	Host                 string            `json:"host"`
+@@ -496,66 +364,6 @@ type UdpHop struct {
+ 	Interval Int32Range `json:"interval"`
+ }
+ 
+-type Masquerade struct {
+-	Type string `json:"type"`
+-
+-	Dir string `json:"dir"`
+-
+-	Url         string `json:"url"`
+-	RewriteHost bool   `json:"rewriteHost"`
+-	Insecure    bool   `json:"insecure"`
+-
+-	Content    string            `json:"content"`
+-	Headers    map[string]string `json:"headers"`
+-	StatusCode int32             `json:"statusCode"`
+-}
+-
+-type HysteriaConfig struct {
+-	Version int32  `json:"version"`
+-	Auth    string `json:"auth"`
+-
+-	Congestion *string    `json:"congestion"`
+-	Up         *Bandwidth `json:"up"`
+-	Down       *Bandwidth `json:"down"`
+-	UdpHop     *UdpHop    `json:"udphop"`
+-
+-	UdpIdleTimeout int64      `json:"udpIdleTimeout"`
+-	Masquerade     Masquerade `json:"masquerade"`
+-}
+-
+-func (c *HysteriaConfig) Build() (proto.Message, error) {
+-	if c.Version != 2 {
+-		return nil, errors.New("version != 2")
+-	}
+-
+-	if c.Congestion != nil || c.Up != nil || c.Down != nil || c.UdpHop != nil {
+-		errors.LogWarning(context.Background(), "congestion & up & down & udphop move to finalmask/quicParams")
+-	}
+-
+-	if c.UdpIdleTimeout != 0 && (c.UdpIdleTimeout < 2 || c.UdpIdleTimeout > 600) {
+-		return nil, errors.New("UdpIdleTimeout must be between 2 and 600")
+-	}
+-
+-	config := &hysteria.Config{}
+-	config.Version = c.Version
+-	config.Auth = c.Auth
+-	config.UdpIdleTimeout = c.UdpIdleTimeout
+-	config.MasqType = c.Masquerade.Type
+-	config.MasqFile = c.Masquerade.Dir
+-	config.MasqUrl = c.Masquerade.Url
+-	config.MasqUrlRewriteHost = c.Masquerade.RewriteHost
+-	config.MasqUrlInsecure = c.Masquerade.Insecure
+-	config.MasqString = c.Masquerade.Content
+-	config.MasqStringHeaders = c.Masquerade.Headers
+-	config.MasqStringStatusCode = c.Masquerade.StatusCode
+-
+-	if config.UdpIdleTimeout == 0 {
+-		config.UdpIdleTimeout = 60
+-	}
+-
+-	return config, nil
+-}
+-
+ func readFileOrString(f string, s []string) ([]byte, error) {
+ 	if len(f) > 0 {
+ 		return filesystem.ReadCert(f)
+@@ -993,23 +801,6 @@ func (p TransportProtocol) Build() (string, error) {
+ 		return "tcp", nil
+ 	case "xhttp", "splithttp":
+ 		return "splithttp", nil
+-	case "kcp", "mkcp":
+-		return "mkcp", nil
+-	case "grpc":
+-		errors.PrintNonRemovalDeprecatedFeatureWarning("gRPC transport (with unnecessary costs, etc.)", "XHTTP stream-up H2")
+-		return "grpc", nil
+-	case "ws", "websocket":
+-		errors.PrintNonRemovalDeprecatedFeatureWarning("WebSocket transport (with ALPN http/1.1, etc.)", "XHTTP H2 & H3")
+-		return "websocket", nil
+-	case "httpupgrade":
+-		errors.PrintNonRemovalDeprecatedFeatureWarning("HTTPUpgrade transport (with ALPN http/1.1, etc.)", "XHTTP H2 & H3")
+-		return "httpupgrade", nil
+-	case "h2", "h3", "http":
+-		return "", errors.PrintRemovedFeatureError("HTTP transport (without header padding, etc.)", "XHTTP stream-one H2 & H3")
+-	case "quic":
+-		return "", errors.PrintRemovedFeatureError("QUIC transport (without web service, etc.)", "XHTTP stream-one H3")
+-	case "hysteria":
+-		return "hysteria", nil
+ 	default:
+ 		return "", errors.New("Config: unknown transport protocol: ", p)
+ 	}
+@@ -2000,23 +1791,18 @@ type FinalMask struct {
+ }
+ 
+ type StreamConfig struct {
+-	Address             *Address           `json:"address"`
+-	Port                uint16             `json:"port"`
+-	Network             *TransportProtocol `json:"network"`
+-	Security            string             `json:"security"`
+-	FinalMask           *FinalMask         `json:"finalmask"`
+-	TLSSettings         *TLSConfig         `json:"tlsSettings"`
+-	REALITYSettings     *REALITYConfig     `json:"realitySettings"`
+-	RAWSettings         *TCPConfig         `json:"rawSettings"`
+-	TCPSettings         *TCPConfig         `json:"tcpSettings"`
+-	XHTTPSettings       *SplitHTTPConfig   `json:"xhttpSettings"`
+-	SplitHTTPSettings   *SplitHTTPConfig   `json:"splithttpSettings"`
+-	KCPSettings         *KCPConfig         `json:"kcpSettings"`
+-	GRPCSettings        *GRPCConfig        `json:"grpcSettings"`
+-	WSSettings          *WebSocketConfig   `json:"wsSettings"`
+-	HTTPUPGRADESettings *HttpUpgradeConfig `json:"httpupgradeSettings"`
+-	HysteriaSettings    *HysteriaConfig    `json:"hysteriaSettings"`
+-	SocketSettings      *SocketConfig      `json:"sockopt"`
++	Address           *Address           `json:"address"`
++	Port              uint16             `json:"port"`
++	Network           *TransportProtocol `json:"network"`
++	Security          string             `json:"security"`
++	FinalMask         *FinalMask         `json:"finalmask"`
++	TLSSettings       *TLSConfig         `json:"tlsSettings"`
++	REALITYSettings   *REALITYConfig     `json:"realitySettings"`
++	RAWSettings       *TCPConfig         `json:"rawSettings"`
++	TCPSettings       *TCPConfig         `json:"tcpSettings"`
++	XHTTPSettings     *SplitHTTPConfig   `json:"xhttpSettings"`
++	SplitHTTPSettings *SplitHTTPConfig   `json:"splithttpSettings"`
++	SocketSettings    *SocketConfig      `json:"sockopt"`
+ }
+ 
+ // Build implements Buildable.
+@@ -2051,7 +1837,7 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
+ 		config.SecuritySettings = append(config.SecuritySettings, tm)
+ 		config.SecurityType = tm.Type
+ 	case "reality":
+-		if config.ProtocolName != "tcp" && config.ProtocolName != "splithttp" && config.ProtocolName != "grpc" {
++		if config.ProtocolName != "tcp" && config.ProtocolName != "splithttp" {
+ 			return nil, errors.New("REALITY only supports RAW, XHTTP and gRPC for now.")
+ 		}
+ 		if c.REALITYSettings == nil {
+@@ -2096,56 +1882,6 @@ func (c *StreamConfig) Build() (*internet.StreamConfig, error) {
+ 			Settings:     serial.ToTypedMessage(hs),
+ 		})
+ 	}
+-	if c.KCPSettings != nil {
+-		ts, err := c.KCPSettings.Build()
+-		if err != nil {
+-			return nil, errors.New("Failed to build mKCP config.").Base(err)
+-		}
+-		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+-			ProtocolName: "mkcp",
+-			Settings:     serial.ToTypedMessage(ts),
+-		})
+-	}
+-	if c.GRPCSettings != nil {
+-		gs, err := c.GRPCSettings.Build()
+-		if err != nil {
+-			return nil, errors.New("Failed to build gRPC config.").Base(err)
+-		}
+-		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+-			ProtocolName: "grpc",
+-			Settings:     serial.ToTypedMessage(gs),
+-		})
+-	}
+-	if c.WSSettings != nil {
+-		ts, err := c.WSSettings.Build()
+-		if err != nil {
+-			return nil, errors.New("Failed to build WebSocket config.").Base(err)
+-		}
+-		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+-			ProtocolName: "websocket",
+-			Settings:     serial.ToTypedMessage(ts),
+-		})
+-	}
+-	if c.HTTPUPGRADESettings != nil {
+-		hs, err := c.HTTPUPGRADESettings.Build()
+-		if err != nil {
+-			return nil, errors.New("Failed to build HTTPUpgrade config.").Base(err)
+-		}
+-		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+-			ProtocolName: "httpupgrade",
+-			Settings:     serial.ToTypedMessage(hs),
+-		})
+-	}
+-	if c.HysteriaSettings != nil {
+-		hs, err := c.HysteriaSettings.Build()
+-		if err != nil {
+-			return nil, errors.New("Failed to build Hysteria config.").Base(err)
+-		}
+-		config.TransportSettings = append(config.TransportSettings, &internet.TransportConfig{
+-			ProtocolName: "hysteria",
+-			Settings:     serial.ToTypedMessage(hs),
+-		})
+-	}
+ 	if c.SocketSettings != nil {
+ 		ss, err := c.SocketSettings.Build()
+ 		if err != nil {
+diff --git a/infra/conf/trojan.go b/infra/conf/trojan.go
+deleted file mode 100644
+index 0848137..0000000
+--- a/infra/conf/trojan.go
++++ /dev/null
+@@ -1,205 +0,0 @@
+-package conf
+-
+-import (
+-	"encoding/json"
+-	"path/filepath"
+-	"runtime"
+-	"strconv"
+-	"strings"
+-	"syscall"
+-
+-	"github.com/xtls/xray-core/common/errors"
+-	"github.com/xtls/xray-core/common/net"
+-	"github.com/xtls/xray-core/common/protocol"
+-	"github.com/xtls/xray-core/common/serial"
+-	"github.com/xtls/xray-core/common/task"
+-	"github.com/xtls/xray-core/proxy/trojan"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-// TrojanServerTarget is configuration of a single trojan server
+-type TrojanServerTarget struct {
+-	Address  *Address `json:"address"`
+-	Port     uint16   `json:"port"`
+-	Level    byte     `json:"level"`
+-	Email    string   `json:"email"`
+-	Password string   `json:"password"`
+-	Flow     string   `json:"flow"`
+-}
+-
+-// TrojanClientConfig is configuration of trojan servers
+-type TrojanClientConfig struct {
+-	Address  *Address              `json:"address"`
+-	Port     uint16                `json:"port"`
+-	Level    byte                  `json:"level"`
+-	Email    string                `json:"email"`
+-	Password string                `json:"password"`
+-	Flow     string                `json:"flow"`
+-	Servers  []*TrojanServerTarget `json:"servers"`
+-}
+-
+-// Build implements Buildable
+-func (c *TrojanClientConfig) Build() (proto.Message, error) {
+-	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
+-
+-	if c.Address != nil {
+-		c.Servers = []*TrojanServerTarget{
+-			{
+-				Address:  c.Address,
+-				Port:     c.Port,
+-				Level:    c.Level,
+-				Email:    c.Email,
+-				Password: c.Password,
+-				Flow:     c.Flow,
+-			},
+-		}
+-	}
+-	if len(c.Servers) != 1 {
+-		return nil, errors.New(`Trojan settings: "servers" should have one and only one member. Multiple endpoints in "servers" should use multiple Trojan outbounds and routing balancer instead`)
+-	}
+-
+-	config := &trojan.ClientConfig{}
+-
+-	for _, rec := range c.Servers {
+-		if rec.Address == nil {
+-			return nil, errors.New("Trojan server address is not set.")
+-		}
+-		if rec.Port == 0 {
+-			return nil, errors.New("Invalid Trojan port.")
+-		}
+-		if rec.Password == "" {
+-			return nil, errors.New("Trojan password is not specified.")
+-		}
+-		if rec.Flow != "" {
+-			return nil, errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
+-		}
+-
+-		config.Server = &protocol.ServerEndpoint{
+-			Address: rec.Address.Build(),
+-			Port:    uint32(rec.Port),
+-			User: &protocol.User{
+-				Level: uint32(rec.Level),
+-				Email: rec.Email,
+-				Account: serial.ToTypedMessage(&trojan.Account{
+-					Password: rec.Password,
+-				}),
+-			},
+-		}
+-
+-		break
+-	}
+-
+-	return config, nil
+-}
+-
+-// TrojanInboundFallback is fallback configuration
+-type TrojanInboundFallback struct {
+-	Name string          `json:"name"`
+-	Alpn string          `json:"alpn"`
+-	Path string          `json:"path"`
+-	Type string          `json:"type"`
+-	Dest json.RawMessage `json:"dest"`
+-	Xver uint64          `json:"xver"`
+-}
+-
+-// TrojanUserConfig is user configuration
+-type TrojanUserConfig struct {
+-	Password string `json:"password"`
+-	Level    byte   `json:"level"`
+-	Email    string `json:"email"`
+-	Flow     string `json:"flow"`
+-}
+-
+-// TrojanServerConfig is Inbound configuration
+-type TrojanServerConfig struct {
+-	Users     []*TrojanUserConfig      `json:"users"`
+-	Clients   []*TrojanUserConfig      `json:"clients"`
+-	Fallbacks []*TrojanInboundFallback `json:"fallbacks"`
+-}
+-
+-// Build implements Buildable
+-func (c *TrojanServerConfig) Build() (proto.Message, error) {
+-	errors.PrintNonRemovalDeprecatedFeatureWarning("Trojan (with no Flow, etc.)", "VLESS with Flow & Seed")
+-
+-	if c.Clients != nil {
+-		c.Users = c.Clients
+-	}
+-
+-	config := &trojan.ServerConfig{
+-		Users: make([]*protocol.User, len(c.Users)),
+-	}
+-
+-	processClient := func(idx int) error {
+-		rawUser := c.Users[idx]
+-		if rawUser.Flow != "" {
+-			return errors.PrintRemovedFeatureError(`Flow for Trojan`, ``)
+-		}
+-
+-		config.Users[idx] = &protocol.User{
+-			Level: uint32(rawUser.Level),
+-			Email: rawUser.Email,
+-			Account: serial.ToTypedMessage(&trojan.Account{
+-				Password: rawUser.Password,
+-			}),
+-		}
+-		return nil
+-	}
+-	if err := task.ParallelForN(len(c.Users), processClient); err != nil {
+-		return nil, err
+-	}
+-
+-	for _, fb := range c.Fallbacks {
+-		var i uint16
+-		var s string
+-		if err := json.Unmarshal(fb.Dest, &i); err == nil {
+-			s = strconv.Itoa(int(i))
+-		} else {
+-			_ = json.Unmarshal(fb.Dest, &s)
+-		}
+-		config.Fallbacks = append(config.Fallbacks, &trojan.Fallback{
+-			Name: fb.Name,
+-			Alpn: fb.Alpn,
+-			Path: fb.Path,
+-			Type: fb.Type,
+-			Dest: s,
+-			Xver: fb.Xver,
+-		})
+-	}
+-	for _, fb := range config.Fallbacks {
+-		/*
+-			if fb.Alpn == "h2" && fb.Path != "" {
+-				return nil, errors.New(`Trojan fallbacks: "alpn":"h2" doesn't support "path"`)
+-			}
+-		*/
+-		if fb.Path != "" && fb.Path[0] != '/' {
+-			return nil, errors.New(`Trojan fallbacks: "path" must be empty or start with "/"`)
+-		}
+-		if fb.Type == "" && fb.Dest != "" {
+-			if fb.Dest == "serve-ws-none" {
+-				fb.Type = "serve"
+-			} else if filepath.IsAbs(fb.Dest) || fb.Dest[0] == '@' {
+-				fb.Type = "unix"
+-				if strings.HasPrefix(fb.Dest, "@@") && (runtime.GOOS == "linux" || runtime.GOOS == "android") {
+-					fullAddr := make([]byte, len(syscall.RawSockaddrUnix{}.Path)) // may need padding to work with haproxy
+-					copy(fullAddr, fb.Dest[1:])
+-					fb.Dest = string(fullAddr)
+-				}
+-			} else {
+-				if _, err := strconv.Atoi(fb.Dest); err == nil {
+-					fb.Dest = "localhost:" + fb.Dest
+-				}
+-				if _, _, err := net.SplitHostPort(fb.Dest); err == nil {
+-					fb.Type = "tcp"
+-				}
+-			}
+-		}
+-		if fb.Type == "" {
+-			return nil, errors.New(`Trojan fallbacks: please fill in a valid value for every "dest"`)
+-		}
+-		if fb.Xver > 2 {
+-			return nil, errors.New(`Trojan fallbacks: invalid PROXY protocol version, "xver" only accepts 0, 1, 2`)
+-		}
+-	}
+-
+-	return config, nil
+-}
+diff --git a/infra/conf/tun.go b/infra/conf/tun.go
+deleted file mode 100644
+index 4ba9165..0000000
+--- a/infra/conf/tun.go
++++ /dev/null
+@@ -1,41 +0,0 @@
+-package conf
+-
+-import (
+-	"github.com/xtls/xray-core/proxy/tun"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-type TunConfig struct {
+-	Name                   string   `json:"name"`
+-	MTU                    uint32   `json:"mtu"`
+-	Gateway                []string `json:"gateway"`
+-	DNS                    []string `json:"dns"`
+-	UserLevel              uint32   `json:"userLevel"`
+-	AutoSystemRoutingTable []string `json:"autoSystemRoutingTable"`
+-	AutoOutboundsInterface *string  `json:"autoOutboundsInterface"`
+-}
+-
+-func (v *TunConfig) Build() (proto.Message, error) {
+-	config := &tun.Config{
+-		Name:                   v.Name,
+-		MTU:                    v.MTU,
+-		Gateway:                v.Gateway,
+-		DNS:                    v.DNS,
+-		UserLevel:              v.UserLevel,
+-		AutoSystemRoutingTable: v.AutoSystemRoutingTable,
+-	}
+-	if v.AutoOutboundsInterface != nil {
+-		config.AutoOutboundsInterface = *v.AutoOutboundsInterface
+-	}
+-	if len(v.AutoSystemRoutingTable) > 0 && v.AutoOutboundsInterface == nil {
+-		config.AutoOutboundsInterface = "auto"
+-	}
+-
+-	if config.Name == "" {
+-		config.Name = "xray0"
+-	}
+-	if config.MTU == 0 {
+-		config.MTU = 1500
+-	}
+-	return config, nil
+-}
+diff --git a/infra/conf/vmess.go b/infra/conf/vmess.go
+deleted file mode 100644
+index a73883b..0000000
+--- a/infra/conf/vmess.go
++++ /dev/null
+@@ -1,189 +0,0 @@
+-package conf
+-
+-import (
+-	"encoding/json"
+-	"strings"
+-
+-	"github.com/xtls/xray-core/common/errors"
+-	"github.com/xtls/xray-core/common/protocol"
+-	"github.com/xtls/xray-core/common/serial"
+-	"github.com/xtls/xray-core/common/task"
+-	"github.com/xtls/xray-core/common/uuid"
+-	"github.com/xtls/xray-core/proxy/vmess"
+-	"github.com/xtls/xray-core/proxy/vmess/inbound"
+-	"github.com/xtls/xray-core/proxy/vmess/outbound"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-type VMessAccount struct {
+-	ID          string `json:"id"`
+-	Security    string `json:"security"`
+-	Experiments string `json:"experiments"`
+-}
+-
+-// Build implements Buildable
+-func (a *VMessAccount) Build() *vmess.Account {
+-	var st protocol.SecurityType
+-	switch strings.ToLower(a.Security) {
+-	case "aes-128-gcm":
+-		st = protocol.SecurityType_AES128_GCM
+-	case "chacha20-poly1305":
+-		st = protocol.SecurityType_CHACHA20_POLY1305
+-	case "auto":
+-		st = protocol.SecurityType_AUTO
+-	case "none":
+-		st = protocol.SecurityType_NONE
+-	case "zero":
+-		st = protocol.SecurityType_ZERO
+-	default:
+-		st = protocol.SecurityType_AUTO
+-	}
+-	return &vmess.Account{
+-		Id: a.ID,
+-		SecuritySettings: &protocol.SecurityConfig{
+-			Type: st,
+-		},
+-		TestsEnabled: a.Experiments,
+-	}
+-}
+-
+-type VMessDefaultConfig struct {
+-	Level byte `json:"level"`
+-}
+-
+-// Build implements Buildable
+-func (c *VMessDefaultConfig) Build() *inbound.DefaultConfig {
+-	config := new(inbound.DefaultConfig)
+-	config.Level = uint32(c.Level)
+-	return config
+-}
+-
+-type VMessInboundConfig struct {
+-	Users    []json.RawMessage   `json:"users"`
+-	Clients  []json.RawMessage   `json:"clients"`
+-	Defaults *VMessDefaultConfig `json:"default"`
+-}
+-
+-// Build implements Buildable
+-func (c *VMessInboundConfig) Build() (proto.Message, error) {
+-	errors.PrintNonRemovalDeprecatedFeatureWarning("VMess (with no Forward Secrecy, etc.)", "VLESS Encryption")
+-
+-	config := &inbound.Config{}
+-
+-	if c.Defaults != nil {
+-		config.Default = c.Defaults.Build()
+-	}
+-
+-	if c.Clients != nil {
+-		c.Users = c.Clients
+-	}
+-	config.User = make([]*protocol.User, len(c.Users))
+-	processUser := func(idx int) error {
+-		rawData := c.Users[idx]
+-		user := new(protocol.User)
+-		if err := json.Unmarshal(rawData, user); err != nil {
+-			return errors.New("invalid VMess user").Base(err)
+-		}
+-		account := new(VMessAccount)
+-		if err := json.Unmarshal(rawData, account); err != nil {
+-			return errors.New("invalid VMess user").Base(err)
+-		}
+-
+-		u, err := uuid.ParseString(account.ID)
+-		if err != nil {
+-			return err
+-		}
+-		account.ID = u.String()
+-
+-		user.Account = serial.ToTypedMessage(account.Build())
+-		config.User[idx] = user
+-		return nil
+-	}
+-	if err := task.ParallelForN(len(c.Users), processUser); err != nil {
+-		return nil, err
+-	}
+-
+-	return config, nil
+-}
+-
+-type VMessOutboundTarget struct {
+-	Address *Address          `json:"address"`
+-	Port    uint16            `json:"port"`
+-	Users   []json.RawMessage `json:"users"`
+-}
+-
+-type VMessOutboundConfig struct {
+-	Address     *Address               `json:"address"`
+-	Port        uint16                 `json:"port"`
+-	Level       uint32                 `json:"level"`
+-	Email       string                 `json:"email"`
+-	ID          string                 `json:"id"`
+-	Security    string                 `json:"security"`
+-	Experiments string                 `json:"experiments"`
+-	Receivers   []*VMessOutboundTarget `json:"vnext"`
+-}
+-
+-// Build implements Buildable
+-func (c *VMessOutboundConfig) Build() (proto.Message, error) {
+-	errors.PrintNonRemovalDeprecatedFeatureWarning("VMess (with no Forward Secrecy, etc.)", "VLESS Encryption")
+-
+-	config := new(outbound.Config)
+-	if c.Address != nil {
+-		c.Receivers = []*VMessOutboundTarget{
+-			{
+-				Address: c.Address,
+-				Port:    c.Port,
+-				Users:   []json.RawMessage{{}},
+-			},
+-		}
+-	}
+-	if len(c.Receivers) != 1 {
+-		return nil, errors.New(`VMess settings: "vnext" should have one and only one member. Multiple endpoints in "vnext" should use multiple VMess outbounds and routing balancer instead`)
+-	}
+-	for _, rec := range c.Receivers {
+-		if len(rec.Users) != 1 {
+-			return nil, errors.New(`VMess vnext: "users" should have one and only one member. Multiple members in "users" should use multiple VMess outbounds and routing balancer instead`)
+-		}
+-		if rec.Address == nil {
+-			return nil, errors.New(`VMess vnext: "address" is not set`)
+-		}
+-		spec := &protocol.ServerEndpoint{
+-			Address: rec.Address.Build(),
+-			Port:    uint32(rec.Port),
+-		}
+-		for _, rawUser := range rec.Users {
+-			user := new(protocol.User)
+-			if c.Address != nil {
+-				user.Level = c.Level
+-				user.Email = c.Email
+-			} else {
+-				if err := json.Unmarshal(rawUser, user); err != nil {
+-					return nil, errors.New("invalid VMess user").Base(err)
+-				}
+-			}
+-			account := new(VMessAccount)
+-			if c.Address != nil {
+-				account.ID = c.ID
+-				account.Security = c.Security
+-				account.Experiments = c.Experiments
+-			} else {
+-				if err := json.Unmarshal(rawUser, account); err != nil {
+-					return nil, errors.New("invalid VMess user").Base(err)
+-				}
+-			}
+-
+-			u, err := uuid.ParseString(account.ID)
+-			if err != nil {
+-				return nil, err
+-			}
+-			account.ID = u.String()
+-
+-			user.Account = serial.ToTypedMessage(account.Build())
+-			spec.User = user
+-			break
+-		}
+-		config.Receiver = spec
+-		break
+-	}
+-	return config, nil
+-}
+diff --git a/infra/conf/wireguard.go b/infra/conf/wireguard.go
+deleted file mode 100644
+index 1ba61f9..0000000
+--- a/infra/conf/wireguard.go
++++ /dev/null
+@@ -1,152 +0,0 @@
+-package conf
+-
+-import (
+-	"encoding/base64"
+-	"encoding/hex"
+-	"strings"
+-
+-	"github.com/xtls/xray-core/common/errors"
+-	"github.com/xtls/xray-core/proxy/wireguard"
+-	"google.golang.org/protobuf/proto"
+-)
+-
+-type WireGuardPeerConfig struct {
+-	PublicKey    string   `json:"publicKey"`
+-	PreSharedKey string   `json:"preSharedKey"`
+-	Endpoint     string   `json:"endpoint"`
+-	KeepAlive    uint32   `json:"keepAlive"`
+-	AllowedIPs   []string `json:"allowedIPs,omitempty"`
+-}
+-
+-func (c *WireGuardPeerConfig) Build() (proto.Message, error) {
+-	var err error
+-	config := new(wireguard.PeerConfig)
+-
+-	if c.PublicKey != "" {
+-		config.PublicKey, err = ParseWireGuardKey(c.PublicKey)
+-		if err != nil {
+-			return nil, err
+-		}
+-	}
+-
+-	if c.PreSharedKey != "" {
+-		config.PreSharedKey, err = ParseWireGuardKey(c.PreSharedKey)
+-		if err != nil {
+-			return nil, err
+-		}
+-	}
+-
+-	config.Endpoint = c.Endpoint
+-	// default 0
+-	config.KeepAlive = c.KeepAlive
+-	if c.AllowedIPs == nil {
+-		config.AllowedIps = []string{"0.0.0.0/0", "::0/0"}
+-	} else {
+-		config.AllowedIps = c.AllowedIPs
+-	}
+-
+-	return config, nil
+-}
+-
+-type WireGuardConfig struct {
+-	IsClient bool `json:""`
+-
+-	NoKernelTun    bool                   `json:"noKernelTun"`
+-	SecretKey      string                 `json:"secretKey"`
+-	Address        []string               `json:"address"`
+-	Peers          []*WireGuardPeerConfig `json:"peers"`
+-	MTU            int32                  `json:"mtu"`
+-	NumWorkers     int32                  `json:"workers"`
+-	Reserved       []byte                 `json:"reserved"`
+-	DomainStrategy string                 `json:"domainStrategy"`
+-}
+-
+-func (c *WireGuardConfig) Build() (proto.Message, error) {
+-	config := new(wireguard.DeviceConfig)
+-
+-	var err error
+-	config.SecretKey, err = ParseWireGuardKey(c.SecretKey)
+-	if err != nil {
+-		return nil, errors.New("invalid WireGuard secret key: %w", err)
+-	}
+-
+-	if c.Address == nil {
+-		// bogon ips
+-		config.Endpoint = []string{"10.0.0.1", "fd59:7153:2388:b5fd:0000:0000:0000:0001"}
+-	} else {
+-		config.Endpoint = c.Address
+-	}
+-
+-	if c.Peers != nil {
+-		config.Peers = make([]*wireguard.PeerConfig, len(c.Peers))
+-		for i, p := range c.Peers {
+-			msg, err := p.Build()
+-			if err != nil {
+-				return nil, err
+-			}
+-			config.Peers[i] = msg.(*wireguard.PeerConfig)
+-		}
+-	}
+-
+-	if c.MTU == 0 {
+-		config.Mtu = 1420
+-	} else {
+-		config.Mtu = c.MTU
+-	}
+-	// these a fallback code exists in wireguard-go code,
+-	// we don't need to process fallback manually
+-	config.NumWorkers = c.NumWorkers
+-
+-	if len(c.Reserved) != 0 && len(c.Reserved) != 3 {
+-		return nil, errors.New(`"reserved" should be empty or 3 bytes`)
+-	}
+-	config.Reserved = c.Reserved
+-
+-	switch strings.ToLower(c.DomainStrategy) {
+-	case "forceip", "":
+-		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP
+-	case "forceipv4":
+-		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP4
+-	case "forceipv6":
+-		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP6
+-	case "forceipv4v6":
+-		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP46
+-	case "forceipv6v4":
+-		config.DomainStrategy = wireguard.DeviceConfig_FORCE_IP64
+-	default:
+-		return nil, errors.New("unsupported domain strategy: ", c.DomainStrategy)
+-	}
+-
+-	config.IsClient = c.IsClient
+-	config.NoKernelTun = c.NoKernelTun
+-
+-	return config, nil
+-}
+-
+-func ParseWireGuardKey(str string) (string, error) {
+-	var err error
+-
+-	if str == "" {
+-		return "", errors.New("key must not be empty")
+-	}
+-
+-	if len(str) == 64 {
+-		_, err = hex.DecodeString(str)
+-		if err == nil {
+-			return str, nil
+-		}
+-	}
+-
+-	var dat []byte
+-	str = strings.TrimSuffix(str, "=")
+-	if strings.ContainsRune(str, '+') || strings.ContainsRune(str, '/') {
+-		dat, err = base64.RawStdEncoding.DecodeString(str)
+-	} else {
+-		dat, err = base64.RawURLEncoding.DecodeString(str)
+-	}
+-	if err == nil {
+-		return hex.EncodeToString(dat), nil
+-	}
+-
+-	return "", errors.New("failed to deserialize key").Base(err)
+-}
+diff --git a/infra/conf/xray.go b/infra/conf/xray.go
+index 3e6e437..370976a 100644
+--- a/infra/conf/xray.go
++++ b/infra/conf/xray.go
+@@ -22,32 +22,20 @@ var (
+ 		"tunnel":        func() interface{} { return new(DokodemoConfig) },
+ 		"dokodemo-door": func() interface{} { return new(DokodemoConfig) },
+ 		"http":          func() interface{} { return new(HTTPServerConfig) },
+-		"shadowsocks":   func() interface{} { return new(ShadowsocksServerConfig) },
+ 		"mixed":         func() interface{} { return new(SocksServerConfig) },
+ 		"socks":         func() interface{} { return new(SocksServerConfig) },
+ 		"vless":         func() interface{} { return new(VLessInboundConfig) },
+-		"vmess":         func() interface{} { return new(VMessInboundConfig) },
+-		"trojan":        func() interface{} { return new(TrojanServerConfig) },
+-		"wireguard":     func() interface{} { return &WireGuardConfig{IsClient: false} },
+-		"hysteria":      func() interface{} { return new(HysteriaServerConfig) },
+-		"tun":           func() interface{} { return new(TunConfig) },
+ 	}, "protocol", "settings")
+ 
+ 	outboundConfigLoader = NewJSONConfigLoader(ConfigCreatorCache{
+-		"block":       func() interface{} { return new(BlackholeConfig) },
+-		"blackhole":   func() interface{} { return new(BlackholeConfig) },
+-		"loopback":    func() interface{} { return new(LoopbackConfig) },
+-		"direct":      func() interface{} { return new(FreedomConfig) },
+-		"freedom":     func() interface{} { return new(FreedomConfig) },
+-		"http":        func() interface{} { return new(HTTPClientConfig) },
+-		"shadowsocks": func() interface{} { return new(ShadowsocksClientConfig) },
+-		"socks":       func() interface{} { return new(SocksClientConfig) },
+-		"vless":       func() interface{} { return new(VLessOutboundConfig) },
+-		"vmess":       func() interface{} { return new(VMessOutboundConfig) },
+-		"trojan":      func() interface{} { return new(TrojanClientConfig) },
+-		"hysteria":    func() interface{} { return new(HysteriaClientConfig) },
+-		"dns":         func() interface{} { return new(DNSOutboundConfig) },
+-		"wireguard":   func() interface{} { return &WireGuardConfig{IsClient: true} },
++		"block":     func() interface{} { return new(BlackholeConfig) },
++		"blackhole": func() interface{} { return new(BlackholeConfig) },
++		"direct":    func() interface{} { return new(FreedomConfig) },
++		"freedom":   func() interface{} { return new(FreedomConfig) },
++		"http":      func() interface{} { return new(HTTPClientConfig) },
++		"socks":     func() interface{} { return new(SocksClientConfig) },
++		"vless":     func() interface{} { return new(VLessOutboundConfig) },
++		"dns":       func() interface{} { return new(DNSOutboundConfig) },
+ 	}, "protocol", "settings")
+ )
+ 
+@@ -368,21 +356,16 @@ type Config struct {
+ 	// left for returning error
+ 	Transport map[string]json.RawMessage `json:"transport"`
+ 
+-	LogConfig        *LogConfig              `json:"log"`
+-	RouterConfig     *RouterConfig           `json:"routing"`
+-	DNSConfig        *DNSConfig              `json:"dns"`
+-	InboundConfigs   []InboundDetourConfig   `json:"inbounds"`
+-	OutboundConfigs  []OutboundDetourConfig  `json:"outbounds"`
+-	Policy           *PolicyConfig           `json:"policy"`
+-	API              *APIConfig              `json:"api"`
+-	Metrics          *MetricsConfig          `json:"metrics"`
+-	Stats            *StatsConfig            `json:"stats"`
+-	Reverse          *ReverseConfig          `json:"reverse"`
+-	FakeDNS          *FakeDNSConfig          `json:"fakeDns"`
+-	Observatory      *ObservatoryConfig      `json:"observatory"`
+-	BurstObservatory *BurstObservatoryConfig `json:"burstObservatory"`
+-	Version          *VersionConfig          `json:"version"`
+-	Geodata          *GeodataConfig          `json:"geodata"`
++	LogConfig       *LogConfig             `json:"log"`
++	RouterConfig    *RouterConfig          `json:"routing"`
++	DNSConfig       *DNSConfig             `json:"dns"`
++	InboundConfigs  []InboundDetourConfig  `json:"inbounds"`
++	OutboundConfigs []OutboundDetourConfig `json:"outbounds"`
++	Policy          *PolicyConfig          `json:"policy"`
++	Stats           *StatsConfig           `json:"stats"`
++	FakeDNS         *FakeDNSConfig         `json:"fakeDns"`
++	Version         *VersionConfig         `json:"version"`
++	Geodata         *GeodataConfig         `json:"geodata"`
+ }
+ 
+ func (c *Config) findInboundTag(tag string) int {
+@@ -426,31 +409,14 @@ func (c *Config) Override(o *Config, fn string) {
+ 	if o.Policy != nil {
+ 		c.Policy = o.Policy
+ 	}
+-	if o.API != nil {
+-		c.API = o.API
+-	}
+-	if o.Metrics != nil {
+-		c.Metrics = o.Metrics
+-	}
+ 	if o.Stats != nil {
+ 		c.Stats = o.Stats
+ 	}
+-	if o.Reverse != nil {
+-		c.Reverse = o.Reverse
+-	}
+ 
+ 	if o.FakeDNS != nil {
+ 		c.FakeDNS = o.FakeDNS
+ 	}
+ 
+-	if o.Observatory != nil {
+-		c.Observatory = o.Observatory
+-	}
+-
+-	if o.BurstObservatory != nil {
+-		c.BurstObservatory = o.BurstObservatory
+-	}
+-
+ 	if o.Version != nil {
+ 		c.Version = o.Version
+ 	}
+@@ -510,20 +476,6 @@ func (c *Config) Build() (*core.Config, error) {
+ 		},
+ 	}
+ 
+-	if c.API != nil {
+-		apiConf, err := c.API.Build()
+-		if err != nil {
+-			return nil, errors.New("failed to build API configuration").Base(err)
+-		}
+-		config.App = append(config.App, serial.ToTypedMessage(apiConf))
+-	}
+-	if c.Metrics != nil {
+-		metricsConf, err := c.Metrics.Build()
+-		if err != nil {
+-			return nil, errors.New("failed to build metrics configuration").Base(err)
+-		}
+-		config.App = append(config.App, serial.ToTypedMessage(metricsConf))
+-	}
+ 	if c.Stats != nil {
+ 		statsConf, err := c.Stats.Build()
+ 		if err != nil {
+@@ -566,15 +518,6 @@ func (c *Config) Build() (*core.Config, error) {
+ 		config.App = append(config.App, serial.ToTypedMessage(pc))
+ 	}
+ 
+-	if c.Reverse != nil {
+-		return nil, errors.PrintRemovedFeatureError(`"legacy reverse"`, `"VLESS Reverse Proxy"`)
+-		r, err := c.Reverse.Build()
+-		if err != nil {
+-			return nil, errors.New("failed to build reverse configuration").Base(err)
+-		}
+-		config.App = append(config.App, serial.ToTypedMessage(r))
+-	}
+-
+ 	if c.FakeDNS != nil {
+ 		r, err := c.FakeDNS.Build()
+ 		if err != nil {
+@@ -583,22 +526,6 @@ func (c *Config) Build() (*core.Config, error) {
+ 		config.App = append([]*serial.TypedMessage{serial.ToTypedMessage(r)}, config.App...)
+ 	}
+ 
+-	if c.Observatory != nil {
+-		r, err := c.Observatory.Build()
+-		if err != nil {
+-			return nil, errors.New("failed to build observatory configuration").Base(err)
+-		}
+-		config.App = append(config.App, serial.ToTypedMessage(r))
+-	}
+-
+-	if c.BurstObservatory != nil {
+-		r, err := c.BurstObservatory.Build()
+-		if err != nil {
+-			return nil, errors.New("failed to build burst observatory configuration").Base(err)
+-		}
+-		config.App = append(config.App, serial.ToTypedMessage(r))
+-	}
+-
+ 	if c.Version != nil {
+ 		r, err := c.Version.Build()
+ 		if err != nil {
+diff --git a/main/distro/all/all.go b/main/distro/all/all.go
+index accb7b0..d66f7ff 100644
+--- a/main/distro/all/all.go
++++ b/main/distro/all/all.go
+@@ -9,22 +9,15 @@ import (
+ 	_ "github.com/xtls/xray-core/app/proxyman/outbound"
+ 
+ 	// Default commander and all its services. This is an optional feature.
+-	_ "github.com/xtls/xray-core/app/commander"
+-	_ "github.com/xtls/xray-core/app/log/command"
+-	_ "github.com/xtls/xray-core/app/proxyman/command"
+-	_ "github.com/xtls/xray-core/app/stats/command"
+ 
+ 	// Developer preview services
+-	_ "github.com/xtls/xray-core/app/observatory/command"
+ 
+ 	// Other optional features.
+ 	_ "github.com/xtls/xray-core/app/dns"
+ 	_ "github.com/xtls/xray-core/app/dns/fakedns"
+ 	_ "github.com/xtls/xray-core/app/geodata"
+ 	_ "github.com/xtls/xray-core/app/log"
+-	_ "github.com/xtls/xray-core/app/metrics"
+ 	_ "github.com/xtls/xray-core/app/policy"
+-	_ "github.com/xtls/xray-core/app/reverse"
+ 	_ "github.com/xtls/xray-core/app/router"
+ 	_ "github.com/xtls/xray-core/app/stats"
+ 
+@@ -32,7 +25,6 @@ import (
+ 	_ "github.com/xtls/xray-core/transport/internet/tagged/taggedimpl"
+ 
+ 	// Developer preview features
+-	_ "github.com/xtls/xray-core/app/observatory"
+ 
+ 	// Inbound and outbound proxies.
+ 	_ "github.com/xtls/xray-core/proxy/blackhole"
+@@ -40,26 +32,16 @@ import (
+ 	_ "github.com/xtls/xray-core/proxy/dokodemo"
+ 	_ "github.com/xtls/xray-core/proxy/freedom"
+ 	_ "github.com/xtls/xray-core/proxy/http"
+-	_ "github.com/xtls/xray-core/proxy/loopback"
+-	_ "github.com/xtls/xray-core/proxy/shadowsocks"
+ 	_ "github.com/xtls/xray-core/proxy/socks"
+-	_ "github.com/xtls/xray-core/proxy/trojan"
+ 	_ "github.com/xtls/xray-core/proxy/vless/inbound"
+ 	_ "github.com/xtls/xray-core/proxy/vless/outbound"
+-	_ "github.com/xtls/xray-core/proxy/vmess/inbound"
+-	_ "github.com/xtls/xray-core/proxy/vmess/outbound"
+-	_ "github.com/xtls/xray-core/proxy/wireguard"
+ 
+ 	// Transports
+-	_ "github.com/xtls/xray-core/transport/internet/grpc"
+-	_ "github.com/xtls/xray-core/transport/internet/httpupgrade"
+-	_ "github.com/xtls/xray-core/transport/internet/kcp"
+ 	_ "github.com/xtls/xray-core/transport/internet/reality"
+ 	_ "github.com/xtls/xray-core/transport/internet/splithttp"
+ 	_ "github.com/xtls/xray-core/transport/internet/tcp"
+ 	_ "github.com/xtls/xray-core/transport/internet/tls"
+ 	_ "github.com/xtls/xray-core/transport/internet/udp"
+-	_ "github.com/xtls/xray-core/transport/internet/websocket"
+ 
+ 	// Transport headers
+ 	_ "github.com/xtls/xray-core/transport/internet/headers/http"
+@@ -67,12 +49,8 @@ import (
+ 
+ 	// JSON & TOML & YAML
+ 	_ "github.com/xtls/xray-core/main/json"
+-	_ "github.com/xtls/xray-core/main/toml"
+-	_ "github.com/xtls/xray-core/main/yaml"
+ 
+ 	// Load config from file or http(s)
+ 	_ "github.com/xtls/xray-core/main/confloader/external"
+-
+ 	// Commands
+-	_ "github.com/xtls/xray-core/main/commands/all"
+ )
+diff --git a/transport/internet/tls/grpc.go b/transport/internet/tls/grpc.go
+deleted file mode 100644
+index 6e5dc57..0000000
+--- a/transport/internet/tls/grpc.go
++++ /dev/null
+@@ -1,108 +0,0 @@
+-package tls
+-
+-import (
+-	"context"
+-	gotls "crypto/tls"
+-	"net"
+-	"net/url"
+-	"strconv"
+-
+-	utls "github.com/refraction-networking/utls"
+-	"google.golang.org/grpc/credentials"
+-)
+-
+-// grpcUtlsInfo contains the auth information for a TLS authenticated connection.
+-// It implements the AuthInfo interface.
+-type grpcUtlsInfo struct {
+-	State utls.ConnectionState
+-	credentials.CommonAuthInfo
+-	// This API is experimental.
+-	SPIFFEID *url.URL
+-}
+-
+-// AuthType returns the type of TLSInfo as a string.
+-func (t grpcUtlsInfo) AuthType() string {
+-	return "utls"
+-}
+-
+-// GetSecurityValue returns security info requested by channelz.
+-func (t grpcUtlsInfo) GetSecurityValue() credentials.ChannelzSecurityValue {
+-	v := &credentials.TLSChannelzSecurityValue{
+-		StandardName: "0x" + strconv.FormatUint(uint64(t.State.CipherSuite), 16),
+-	}
+-	// Currently there's no way to get LocalCertificate info from tls package.
+-	if len(t.State.PeerCertificates) > 0 {
+-		v.RemoteCertificate = t.State.PeerCertificates[0].Raw
+-	}
+-	return v
+-}
+-
+-// grpcUtls is the credentials required for authenticating a connection using TLS.
+-type grpcUtls struct {
+-	config      *gotls.Config
+-	fingerprint *utls.ClientHelloID
+-}
+-
+-func (c grpcUtls) Info() credentials.ProtocolInfo {
+-	return credentials.ProtocolInfo{
+-		SecurityProtocol: "tls",
+-		SecurityVersion:  "1.2",
+-		ServerName:       c.config.ServerName,
+-	}
+-}
+-
+-func (c *grpcUtls) ClientHandshake(ctx context.Context, authority string, rawConn net.Conn) (_ net.Conn, _ credentials.AuthInfo, err error) {
+-	// use local cfg to avoid clobbering ServerName if using multiple endpoints
+-	cfg := c.config.Clone()
+-	if cfg.ServerName == "" {
+-		serverName, _, err := net.SplitHostPort(authority)
+-		if err != nil {
+-			// If the authority had no host port or if the authority cannot be parsed, use it as-is.
+-			serverName = authority
+-		}
+-		cfg.ServerName = serverName
+-	}
+-	conn := UClient(rawConn, cfg, c.fingerprint).(*UConn)
+-	errChannel := make(chan error, 1)
+-	go func() {
+-		errChannel <- conn.HandshakeContext(ctx)
+-		close(errChannel)
+-	}()
+-	select {
+-	case err := <-errChannel:
+-		if err != nil {
+-			conn.Close()
+-			return nil, nil, err
+-		}
+-	case <-ctx.Done():
+-		conn.Close()
+-		return nil, nil, ctx.Err()
+-	}
+-	tlsInfo := grpcUtlsInfo{
+-		State: conn.ConnectionState(),
+-		CommonAuthInfo: credentials.CommonAuthInfo{
+-			SecurityLevel: credentials.PrivacyAndIntegrity,
+-		},
+-	}
+-	return conn, tlsInfo, nil
+-}
+-
+-// ServerHandshake will always panic. We don't support running uTLS as server.
+-func (c *grpcUtls) ServerHandshake(net.Conn) (net.Conn, credentials.AuthInfo, error) {
+-	panic("not available!")
+-}
+-
+-func (c *grpcUtls) Clone() credentials.TransportCredentials {
+-	return NewGrpcUtls(c.config, c.fingerprint)
+-}
+-
+-func (c *grpcUtls) OverrideServerName(serverNameOverride string) error {
+-	c.config.ServerName = serverNameOverride
+-	return nil
+-}
+-
+-// NewGrpcUtls uses c to construct a TransportCredentials based on uTLS.
+-func NewGrpcUtls(c *gotls.Config, fingerprint *utls.ClientHelloID) credentials.TransportCredentials {
+-	tc := &grpcUtls{c.Clone(), fingerprint}
+-	return tc
+-}
