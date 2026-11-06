@@ -3,13 +3,18 @@
 
 status() {
 	local pid rss memory profile
-	pid=$(ubus call service list '{"name":"vless-lite","verbose":true}' | jsonfilter -e '@["vless-lite"].instances.instance1.pid')
-	profile=$(ubus call service list '{"name":"vless-lite","verbose":true}' | jsonfilter -e '@["vless-lite"].instances.instance1.data.profile')
+	if [ -r /var/run/vless-lite/core.pid ]; then
+		read -r pid profile < /var/run/vless-lite/core.pid
+	fi
 	rss=0
 	case "$pid" in
 		''|*[!0-9]*) pid=0 ;;
-		*) rss=$(awk '/^VmRSS:/ {print $2}' "/proc/$pid/status" 2>/dev/null) ;;
+		*)
+			rss=$(awk '/^Name:/ { core = ($2 == "xray-lite") } /^VmRSS:/ && core {print $2}' "/proc/$pid/status" 2>/dev/null)
+			[ -n "$rss" ] || pid=0
+			;;
 	esac
+	[ "$pid" != 0 ] || profile=
 	memory=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
 	json_add_int pid "${pid:-0}"
 	json_add_int rss_kib "${rss:-0}"
@@ -18,12 +23,12 @@ status() {
 }
 
 case "$1:$2" in
-	list:) printf '%s\n' '{"status":{},"logs":{},"connect":{},"disconnect":{},"probe":{}}'; exit ;;
+	list:) printf '%s\n' '{"status":{},"logs":{},"validate":{"link":"","resolver":"","rules":""},"connect":{},"disconnect":{},"probe":{}}'; exit ;;
 	call:probe)
 		# Do not spawn multiple Go runtimes on a 64 MiB device.
-		exec 9>/var/lock/vless-lite-probe.lock
+		exec 9>/var/lock/vless-lite-check.lock
 		if ! flock -n 9; then
-			printf '%s\n' '{"ok":false,"error":"Probe already running"}'
+			printf '%s\n' '{"ok":false,"error":"A connection check or profile validation is already running"}'
 			exit
 		fi
 		if /usr/bin/xray-lite manager probe; then exit 0; fi
@@ -34,6 +39,17 @@ esac
 json_init
 case "$1:$2" in
 	call:status) status ;;
+	call:validate)
+		read -r input
+		json_load "$input" || exit 1
+		json_get_vars link resolver rules
+		json_init
+		if VLESS_LITE_LINK="$link" /etc/init.d/vless-lite validate "$resolver" "$rules"; then
+			json_add_boolean ok 1
+		else
+			json_add_boolean ok 0
+			json_add_string error 'Profile validation failed or is busy. Check the VLESS link, DNS resolver and routing rules.'
+		fi ;;
 	call:logs)
 		json_add_string logs "$(logread -e 'vless-lite' -l 60 | tail -c 12288)" ;;
 	call:connect|call:disconnect)
@@ -48,4 +64,3 @@ case "$1:$2" in
 	*) exit 1 ;;
 esac
 json_dump
-

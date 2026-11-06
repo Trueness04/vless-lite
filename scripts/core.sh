@@ -16,7 +16,7 @@ else
 fi
 cp "$root/core/manager.go" main/vless_manager.go
 export CGO_ENABLED=0
-flags=(-gcflags=all=-l -trimpath -buildvcs=false '-ldflags=-s -w -buildid= -checklinkname=0')
+flags=(-trimpath -buildvcs=false '-ldflags=-s -w -buildid= -checklinkname=0')
 GOOS=linux GOARCH=mips GOMIPS=softfloat go list -deps ./main > "$root/dist/dependencies.txt"
 if grep -E 'google.golang.org/grpc|/proxy/(vmess|trojan|shadowsocks[^/]*|wireguard|hysteria|tun)(/|$)|/transport/internet/(grpc|kcp)(/|$)' "$root/dist/dependencies.txt"; then
     exit 1

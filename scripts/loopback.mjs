@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn, execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import http from 'node:http';
+import https from 'node:https';
 import http2 from 'node:http2';
 import { createHash, generateKeyPairSync, X509Certificate } from 'node:crypto';
 import net from 'node:net';
@@ -15,9 +15,10 @@ const run = promisify(execFile);
 const tmp = await mkdtemp(path.join(os.tmpdir(), 'vless-lite-'));
 const children = [];
 let decoy;
-const server = http.createServer((_, response) => response.end('vless-lite-loopback'));
+let server;
 const local = '127.0.0.1';
-const base = JSON.parse(await readFile('openwrt/package/files/etc/vless-lite/config.json'));
+const template = 'openwrt/package/files/etc/vless-lite/config.json';
+const base = JSON.parse(await readFile(template));
 const id = base.outbounds[0].settings.vnext[0].users[0].id;
 
 async function listen(socket) {
@@ -58,13 +59,15 @@ async function start(name, config) {
 }
 
 try {
-    const target = await listen(server);
     const keyPath = path.join(tmp, 'key.pem');
     const certPath = path.join(tmp, 'cert.pem');
     await run('go', ['run', './scripts/test-cert.go', certPath, keyPath]);
     const cert = await readFile(certPath);
+    const key = await readFile(keyPath);
+    server = https.createServer({ key, cert }, (_, response) => response.end('vless-lite-loopback'));
+    const target = await listen(server);
     const pin = createHash('sha256').update(new X509Certificate(cert).raw).digest('hex');
-    decoy = http2.createSecureServer({ key: await readFile(keyPath), cert, allowHTTP1: true });
+    decoy = http2.createSecureServer({ key, cert, allowHTTP1: true });
     decoy.on('request', (_, response) => response.end('decoy'));
     const decoyPort = await listen(decoy);
     const keys = generateKeyPairSync('x25519');
@@ -78,14 +81,19 @@ try {
         const socks = await reservePort();
         const proxy = await reservePort();
         const streamSettings = { network, security };
-        if (network === 'xhttp') streamSettings.xhttpSettings = { path: '/test' };
+        const parameters = new URLSearchParams({ type: network, security });
+        if (network === 'xhttp') {
+            streamSettings.xhttpSettings = { path: '/test' };
+            parameters.set('path', '/test');
+        }
         const serverStream = { ...streamSettings };
         if (security === 'tls') {
-            streamSettings.tlsSettings = { serverName: 'localhost', pinnedPeerCertSha256: pin };
             serverStream.tlsSettings = { certificates: [{ certificateFile: certPath, keyFile: keyPath }] };
         }
         if (security === 'reality') {
-            streamSettings.realitySettings = { serverName: 'localhost', fingerprint: 'chrome', password: publicKey, shortId };
+            for (const [key, value] of Object.entries({ sni: 'localhost', pbk: publicKey, sid: shortId })) {
+                parameters.set(key, value);
+            }
             serverStream.realitySettings = { target: local + ':' + decoyPort, serverNames: ['localhost'], privateKey, shortIds: [shortId] };
         }
         const upstream = await start('upstream', {
@@ -95,20 +103,30 @@ try {
             }],
             outbounds: [{ protocol: 'freedom', settings: { finalRules: [{ action: 'allow', ip: [local], port: target }] } }],
         });
-        const client = await start('client', {
-            inbounds: [
-                { listen: local, port: socks, protocol: 'socks' },
-                { listen: local, port: proxy, protocol: 'http' },
-            ],
-            outbounds: [{
-                protocol: 'vless', streamSettings,
-                settings: { vnext: [{ address: local, port: inbound, users: [{ id, encryption: 'none' }] }] },
-            }],
-        });
-        for (const url of [`socks5h://${local}:${socks}`, `http://${local}:${proxy}`]) {
-            const result = await run('curl', ['-fsS', '--max-time', '5', '--noproxy', '', '--proxy', url, `http://${local}:${target}/`]);
-            assert.equal(result.stdout, 'vless-lite-loopback');
+        const runner = process.env.VLESS_TEST_EMULATOR;
+        const link = `vless://${id}@${local}:${inbound}?${parameters}`;
+        const rendered = await run(runner || binary, [
+            ...(runner ? [binary] : []), 'manager', 'render', template, '1.1.1.1', '',
+        ], { env: { ...process.env, VLESS_LITE_LINK: link } });
+        const config = JSON.parse(rendered.stdout);
+        config.inbounds = config.inbounds.filter(({ protocol }) => protocol === 'socks' || protocol === 'http');
+        for (const entry of config.inbounds) entry.port = entry.protocol === 'socks' ? socks : proxy;
+        if (security === 'tls') {
+            const tls = config.outbounds[0].streamSettings.tlsSettings;
+            assert.equal(tls.serverName, local);
+            tls.pinnedPeerCertSha256 = pin;
         }
+        const client = await start('client', config);
+        for (const url of [`socks5h://${local}:${socks}`, `http://${local}:${proxy}`]) {
+            for (let connection = 0; connection < 10; connection++) {
+                const result = await run('curl', ['-fsS', '--max-time', '5', '--noproxy', '', '--proxy', url, '--cacert', certPath, `https://${local}:${target}/`]);
+                assert.equal(result.stdout, 'vless-lite-loopback');
+            }
+        }
+        const memory = await readFile(`/proc/${client.pid}/status`, 'utf8');
+        const peak = memory.match(/^VmHWM:\s+(\d+) kB/m);
+        assert.ok(peak, 'missing client peak RSS');
+        console.log(`${network}/${security} client process peak RSS: ${peak[1]} KiB (${runner || 'host'})`);
         client.kill();
         upstream.kill();
         console.log(network + '/' + security + ' VLESS via SOCKS5 and HTTP passed');
@@ -121,7 +139,7 @@ try {
         }
     }
     if (decoy) decoy.close();
-    server.close();
+    if (server) server.close();
     await rm(tmp, { recursive: true, force: true });
 }
 

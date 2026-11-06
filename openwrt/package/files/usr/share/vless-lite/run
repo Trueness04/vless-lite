@@ -1,0 +1,39 @@
+#!/bin/sh
+set -eu
+
+firewall=/usr/share/vless-lite/firewall
+pidfile=/var/run/vless-lite/core.pid
+child=
+cleanup() {
+	"$firewall" remove || logger -t vless-lite 'Could not remove interception table'
+	rm -f "$pidfile"
+	if [ -n "$child" ]; then
+		kill "$child" 2>/dev/null || true
+		wait "$child" 2>/dev/null || true
+	fi
+}
+trap cleanup EXIT
+trap 'exit 0' TERM INT
+
+"$firewall" remove
+/usr/bin/xray-lite run -config "$1" &
+child=$!
+for attempt in $(seq 1 30); do
+	kill -0 "$child" 2>/dev/null || exit 1
+	if awk '
+		FILENAME ~ /\/tcp6?$/ && $4 == "0A" {
+			if ($2 ~ /:3039$/) proxy = 1
+			if ($2 ~ /:041D$/) dns_tcp = 1
+		}
+		FILENAME ~ /\/udp6?$/ && $2 ~ /:041D$/ { dns_udp = 1 }
+		END { exit !(proxy && dns_tcp && dns_udp) }
+	' /proc/net/tcp /proc/net/tcp6 /proc/net/udp /proc/net/udp6 2>/dev/null; then
+		"$firewall" apply
+		printf '%s %s\n' "$child" "$2" > "$pidfile"
+		wait "$child"
+		exit
+	fi
+	sleep 1
+done
+logger -t vless-lite 'Interception listeners did not become ready'
+exit 1

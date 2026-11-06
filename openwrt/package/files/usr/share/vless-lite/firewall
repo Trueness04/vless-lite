@@ -34,15 +34,9 @@ table inet vless_lite {
 		iifname "br-lan" meta nfproto ipv4 ct status dnat return
 		tcp dport { 1053, 12345 } drop
 		udp dport 1053 drop
-		iifname "br-lan" meta nfproto ipv6 meta l4proto { tcp, udp } th dport 53 drop
-	}
-	chain prevent_bypass {
-		type filter hook forward priority -10; policy accept;
-		iifname "br-lan" drop
 	}
 }
 NFT
 	;;
 *) exit 2 ;;
 esac
-

@@ -1,0 +1,540 @@
+{
+  "0": [
+    {
+      "test": "0.1",
+      "expected": "تمام فایل‌ها، Branchها، Commitها، Workflowها و Dependencyهای Repository بررسی شده باشند."
+    },
+    {
+      "test": "0.2",
+      "expected": "تمام اسکریپت‌های دارای عملیات SSH، SCP، SFTP، Sysupgrade، MTD، Reboot و Flash شناسایی شده باشند."
+    },
+    {
+      "test": "0.3",
+      "expected": "هیچ Workflow اجازه اتصال خودکار به روتر فیزیکی نداشته باشد."
+    },
+    {
+      "test": "0.4",
+      "expected": "هیچ Credential یا Secret مربوط به روتر در GitHub یا سورس قرار نگرفته باشد."
+    },
+    {
+      "test": "0.5",
+      "expected": "نسخه هدف OpenWrt، Target، Subtarget و Package Architecture مستند و تأیید شده باشند."
+    },
+    {
+      "test": "0.6",
+      "expected": "پارتیشن‌بندی Flash بر اساس DTS و مشخصات رسمی دستگاه استخراج شده باشد."
+    },
+    {
+      "test": "0.7",
+      "expected": "تمام مشکلات شناخته‌شده در یک Issue Register ثبت شده باشند."
+    },
+    {
+      "test": "0.8",
+      "expected": "Commit مبنای پروژه مشخص باشد و وضعیت Git قابل بازتولید باشد."
+    }
+  ],
+  "1": [
+    {
+      "test": "1.1",
+      "expected": "Firmware از سورس رسمی OpenWrt ساخته شده باشد."
+    },
+    {
+      "test": "1.2",
+      "expected": "Target دقیق DIR-869 A1 صحیح باشد."
+    },
+    {
+      "test": "1.3",
+      "expected": "LuCI رسمی و `luci-theme-bootstrap` نصب شده باشند."
+    },
+    {
+      "test": "1.4",
+      "expected": "صفحه‌های اصلی LuCI موجود و قابل دسترسی باشند:"
+    },
+    {
+      "test": "1.5",
+      "expected": "Package Manager متناسب با نسخه OpenWrt کار کند."
+    },
+    {
+      "test": "1.6",
+      "expected": "هیچ فایل یا صفحه وابسته به MoCI در Firmware پایه وجود نداشته باشد."
+    },
+    {
+      "test": "1.7",
+      "expected": "پیکربندی شبکه و Wireless پیش‌فرض OpenWrt بدون تغییر مخرب حفظ شده باشد."
+    },
+    {
+      "test": "1.8",
+      "expected": "VLESS به‌صورت پیش‌فرض اجرا نشود."
+    },
+    {
+      "test": "1.9",
+      "expected": "هیچ Dependency ضروری برای مدیریت دستگاه حذف نشده باشد."
+    },
+    {
+      "test": "1.10",
+      "expected": "Image Metadata و Sysupgrade Compatibility معتبر باشند."
+    }
+  ],
+  "2": [
+    {
+      "test": "2.1",
+      "expected": "اندازه Kernel، RootFS و SquashFS جداگانه گزارش شود."
+    },
+    {
+      "test": "2.2",
+      "expected": "اندازه Factory و Sysupgrade جداگانه گزارش شود."
+    },
+    {
+      "test": "2.3",
+      "expected": "حجم واقعی هر بسته در Image محاسبه شود."
+    },
+    {
+      "test": "2.4",
+      "expected": "تمام بسته‌های حذف‌شده دلیل فنی مستند داشته باشند."
+    },
+    {
+      "test": "2.5",
+      "expected": "هیچ بسته ضروری برای Wireless، Firewall، DNS، LuCI یا Recovery حذف نشده باشد."
+    },
+    {
+      "test": "2.6",
+      "expected": "فضای آزاد Overlay پس از نصب اجزای ضروری حداقل 2 MiB باشد."
+    },
+    {
+      "test": "2.7",
+      "expected": "`apk update` بدون پرشدن Overlay اجرا شود."
+    },
+    {
+      "test": "2.8",
+      "expected": "تنظیمات Compression و Compiler Optimization مستند باشند."
+    },
+    {
+      "test": "2.9",
+      "expected": "اندازه باینری خام با اندازه واقعی آن در SquashFS اشتباه گرفته نشود."
+    },
+    {
+      "test": "2.10",
+      "expected": "مصرف RAM و CPU سرویس‌ها جداگانه اندازه‌گیری شود."
+    }
+  ],
+  "3": [
+    {
+      "test": "3.1",
+      "expected": "باینری مخصوص MIPS و معماری صحیح تولید شود."
+    },
+    {
+      "test": "3.2",
+      "expected": "VLESS Share Link به‌درستی Parse شود."
+    },
+    {
+      "test": "3.3",
+      "expected": "مقادیر زیر به‌درستی پردازش شوند:"
+    },
+    {
+      "test": "3.4",
+      "expected": "ترکیب‌های معتبر VLESS + REALITY و VLESS + TLS پشتیبانی شوند."
+    },
+    {
+      "test": "3.5",
+      "expected": "XHTTP و TCP/RAW طبق ماتریس قابلیت‌های اعلام‌شده کار کنند."
+    },
+    {
+      "test": "3.6",
+      "expected": "تنظیمات نامعتبر قبل از اتصال شناسایی شوند."
+    },
+    {
+      "test": "3.7",
+      "expected": "اطلاعات حساس در Log افشا نشوند."
+    },
+    {
+      "test": "3.8",
+      "expected": "باینری در اجرای مداوم Memory Leak نداشته باشد."
+    }
+  ],
+  "4": [
+    {
+      "test": "4.1",
+      "expected": "مدیریت Nodeها کاملاً عملیاتی باشد."
+    },
+    {
+      "test": "4.2",
+      "expected": "حداقل 50 Node در تست مدیریت و Persistence بررسی شوند."
+    },
+    {
+      "test": "4.3",
+      "expected": "افزودن، ویرایش، حذف و انتخاب Node موفق باشد."
+    },
+    {
+      "test": "4.4",
+      "expected": "چند Subscription مستقل قابل مدیریت باشند."
+    },
+    {
+      "test": "4.5",
+      "expected": "بروزرسانی Subscription باعث حذف Nodeهای سالم و حفظ تنظیمات دستی نشود."
+    },
+    {
+      "test": "4.6",
+      "expected": "Subscription نامعتبر باعث تخریب اطلاعات قبلی نشود."
+    },
+    {
+      "test": "4.7",
+      "expected": "نوشتن تنظیمات اتمیک باشد."
+    },
+    {
+      "test": "4.8",
+      "expected": "فایل تنظیمات ناقص باعث Crash سرویس نشود."
+    },
+    {
+      "test": "4.9",
+      "expected": "سرویس با procd مدیریت شود."
+    },
+    {
+      "test": "4.10",
+      "expected": "Start، Stop، Restart و Status صحیح باشند."
+    },
+    {
+      "test": "4.11",
+      "expected": "پس از 10 چرخه Restart تنظیمات سالم باقی بمانند."
+    },
+    {
+      "test": "4.12",
+      "expected": "Crash سرویس شناسایی شود."
+    },
+    {
+      "test": "4.13",
+      "expected": "اطلاعات حساس در لاگ‌ها و API افشا نشوند."
+    },
+    {
+      "test": "4.14",
+      "expected": "خطاهای Backend دارای کد و پیام قابل تشخیص باشند."
+    }
+  ],
+  "5": [
+    {
+      "test": "5.1",
+      "expected": "Transparent Proxy برای کلاینت‌های LAN کار کند."
+    },
+    {
+      "test": "5.2",
+      "expected": "کلاینت‌های Wi-Fi نیز از همان سیاست مسیریابی استفاده کنند."
+    },
+    {
+      "test": "5.3",
+      "expected": "حالت‌های Global، Rule و Direct عملیاتی باشند."
+    },
+    {
+      "test": "5.4",
+      "expected": "ترافیک LAN و مدیریت روتر مسدود نشود."
+    },
+    {
+      "test": "5.5",
+      "expected": "DHCP و DNS محلی سالم باقی بمانند."
+    },
+    {
+      "test": "5.6",
+      "expected": "DNS Leak مطابق سیاست انتخابی وجود نداشته باشد."
+    },
+    {
+      "test": "5.7",
+      "expected": "Routing Loop وجود نداشته باشد."
+    },
+    {
+      "test": "5.8",
+      "expected": "Firewall از firewall4 و nftables استفاده کند."
+    },
+    {
+      "test": "5.9",
+      "expected": "قوانین اختصاصی قابل حذف و بازیابی باشند."
+    },
+    {
+      "test": "5.10",
+      "expected": "شکست سرویس باعث از بین رفتن دسترسی مدیریتی نشود."
+    },
+    {
+      "test": "5.11",
+      "expected": "UDP و IPv6 یا به‌درستی مسیریابی شوند یا سیاست صریح و قابل مشاهده داشته باشند."
+    },
+    {
+      "test": "5.12",
+      "expected": "هیچ Drop سراسری و بی‌دلیل روی `br-lan` مجاز نیست."
+    },
+    {
+      "test": "5.13",
+      "expected": "رفتار Fail-Open و Fail-Closed قابل انتخاب باشد."
+    },
+    {
+      "test": "5.14",
+      "expected": "وضعیت Direct در حالت Fail-Open به کاربر اعلام شود."
+    }
+  ],
+  "6": [
+    {
+      "test": "6.1",
+      "expected": "رابط با ساختار Native LuCI ساخته شده باشد."
+    },
+    {
+      "test": "6.2",
+      "expected": "تم اصلی Bootstrap باقی بماند."
+    },
+    {
+      "test": "6.3",
+      "expected": "هیچ وابستگی به MoCI وجود نداشته باشد."
+    },
+    {
+      "test": "6.4",
+      "expected": "هیچ CSS Framework سنگین و موازی اضافه نشود."
+    },
+    {
+      "test": "6.5",
+      "expected": "Dashboard اطلاعات واقعی Backend را نمایش دهد."
+    },
+    {
+      "test": "6.6",
+      "expected": "تمام فرم‌ها اعتبارسنجی داشته باشند."
+    },
+    {
+      "test": "6.7",
+      "expected": "تمام Buttonها عملکرد واقعی داشته باشند."
+    },
+    {
+      "test": "6.8",
+      "expected": "عملیات مخرب Dialog تأیید داشته باشند."
+    },
+    {
+      "test": "6.9",
+      "expected": "وضعیت Loading، Success و Error نمایش داده شود."
+    },
+    {
+      "test": "6.10",
+      "expected": "خطاهای Backend پنهان نشوند."
+    },
+    {
+      "test": "6.11",
+      "expected": "هیچ Input یا Button بدون کاربرد وجود نداشته باشد."
+    },
+    {
+      "test": "6.12",
+      "expected": "لاگ زنده قابل مشاهده باشد."
+    },
+    {
+      "test": "6.13",
+      "expected": "رابط با Desktop و Mobile سازگار باشد."
+    },
+    {
+      "test": "6.14",
+      "expected": "هیچ Asset ضروری با خطای 404 بارگذاری نشود."
+    },
+    {
+      "test": "6.15",
+      "expected": "هیچ خطای Uncaught JavaScript وجود نداشته باشد."
+    }
+  ],
+  "7": [
+    {
+      "test": "7.1",
+      "expected": "مخزن مستقل `Trueness04/vless-lite-apk` ایجاد شده باشد."
+    },
+    {
+      "test": "7.2",
+      "expected": "بسته‌های Core و Manager مستقل باشند."
+    },
+    {
+      "test": "7.3",
+      "expected": "بسته رابط LuCI وابستگی صحیح به LuCI داشته باشد."
+    },
+    {
+      "test": "7.4",
+      "expected": "معماری بسته‌ها با Target دستگاه تطابق داشته باشد."
+    },
+    {
+      "test": "7.5",
+      "expected": "Package Feed دارای امضای معتبر باشد."
+    },
+    {
+      "test": "7.6",
+      "expected": "کلید خصوصی فقط در GitHub Secrets نگهداری شود."
+    },
+    {
+      "test": "7.7",
+      "expected": "کلید عمومی برای نصب روی دستگاه منتشر شود."
+    },
+    {
+      "test": "7.8",
+      "expected": "`apk update` بدون خطای Signature اجرا شود."
+    },
+    {
+      "test": "7.9",
+      "expected": "`apk add` بدون `--allow-untrusted` موفق باشد."
+    },
+    {
+      "test": "7.10",
+      "expected": "Upgrade تنظیمات را حفظ کند."
+    },
+    {
+      "test": "7.11",
+      "expected": "Uninstall فایل‌های اختصاصی را پاک کند، اما تنظیمات کاربر مطابق سیاست حذف حفظ شوند."
+    },
+    {
+      "test": "7.12",
+      "expected": "نصب مجدد موفق باشد."
+    },
+    {
+      "test": "7.13",
+      "expected": "Firmware نهایی تمام وابستگی‌های ضروری را داشته باشد."
+    },
+    {
+      "test": "7.14",
+      "expected": "هیچ بسته تکراری یا ناسازگار وجود نداشته باشد."
+    }
+  ],
+  "8": [
+    {
+      "test": "8.1",
+      "expected": "GitHub Actions با هر Pull Request اجرا شود."
+    },
+    {
+      "test": "8.2",
+      "expected": "Build Firmware واقعی انجام شود."
+    },
+    {
+      "test": "8.3",
+      "expected": "Build تمام APKها انجام شود."
+    },
+    {
+      "test": "8.4",
+      "expected": "تست Core اجرا شود."
+    },
+    {
+      "test": "8.5",
+      "expected": "تست Backend اجرا شود."
+    },
+    {
+      "test": "8.6",
+      "expected": "تست Frontend اجرا شود."
+    },
+    {
+      "test": "8.7",
+      "expected": "تست Package Feed و Signature انجام شود."
+    },
+    {
+      "test": "8.8",
+      "expected": "کنترل اندازه Image انجام شود."
+    },
+    {
+      "test": "8.9",
+      "expected": "کنترل Dependency انجام شود."
+    },
+    {
+      "test": "8.10",
+      "expected": "بررسی Secret و اطلاعات حساس انجام شود."
+    },
+    {
+      "test": "8.11",
+      "expected": "Artifactها به Commit مشخص متصل باشند."
+    },
+    {
+      "test": "8.12",
+      "expected": "SHA256 تمام خروجی‌ها تولید شود."
+    },
+    {
+      "test": "8.13",
+      "expected": "SBOM تولید شود."
+    },
+    {
+      "test": "8.14",
+      "expected": "هیچ تست حیاتی Skip نشده باشد."
+    },
+    {
+      "test": "8.15",
+      "expected": "هیچ Critical یا High Security Finding حل‌نشده وجود نداشته باشد."
+    },
+    {
+      "test": "8.16",
+      "expected": "Branch Protection واقعاً فعال باشد."
+    },
+    {
+      "test": "8.17",
+      "expected": "Merge با Check ناموفق مسدود شود."
+    },
+    {
+      "test": "8.18",
+      "expected": "Artifact قابل دریافت و بررسی باشد."
+    }
+  ],
+  "9": [
+    {
+      "test": "9.1",
+      "expected": "SHA256 Image تأیید شود."
+    },
+    {
+      "test": "9.2",
+      "expected": "مدل و Revision دستگاه تطبیق داده شوند."
+    },
+    {
+      "test": "9.3",
+      "expected": "روش Recovery مستند باشد."
+    },
+    {
+      "test": "9.4",
+      "expected": "Backup تنظیمات موجود باشد."
+    },
+    {
+      "test": "9.5",
+      "expected": "Image با پارتیشن واقعی تطابق داشته باشد."
+    },
+    {
+      "test": "9.6",
+      "expected": "مالک پیش از هر عملیات Flash تأیید کند."
+    }
+  ],
+  "10": [
+    {
+      "test": "10.1",
+      "expected": "Gateهای 0 تا 9 همگی تأیید شده باشند."
+    },
+    {
+      "test": "10.2",
+      "expected": "هیچ Critical یا High Bug باز باقی نمانده باشد."
+    },
+    {
+      "test": "10.3",
+      "expected": "هیچ قابلیت ضروری با وضعیت NOT TESTED باقی نمانده باشد."
+    },
+    {
+      "test": "10.4",
+      "expected": "Firmware نهایی با Commit مشخص ساخته شده باشد."
+    },
+    {
+      "test": "10.5",
+      "expected": "APKها امضای معتبر داشته باشند."
+    },
+    {
+      "test": "10.6",
+      "expected": "SHA256 تمام فایل‌ها منتشر شده باشد."
+    },
+    {
+      "test": "10.7",
+      "expected": "Release Notes کامل باشند."
+    },
+    {
+      "test": "10.8",
+      "expected": "Package Manifest منتشر شده باشد."
+    },
+    {
+      "test": "10.9",
+      "expected": "گزارش اندازه Firmware و مصرف منابع منتشر شده باشد."
+    },
+    {
+      "test": "10.10",
+      "expected": "مستندات نصب و بازیابی موجود باشند."
+    },
+    {
+      "test": "10.11",
+      "expected": "روش Rollback مستند و قابل اجرا باشد."
+    },
+    {
+      "test": "10.12",
+      "expected": "فایل‌های Release از GitHub قابل دریافت باشند."
+    }
+  ]
+}

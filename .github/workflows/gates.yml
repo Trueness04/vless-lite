@@ -1,0 +1,80 @@
+name: Mandatory acceptance gates
+on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  gate0:
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '0'
+      upstream: ${{ 'success' }}
+  gate1:
+    needs: gate0
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '1'
+      upstream: ${{ needs.gate0.result }}
+  gate2:
+    needs: gate1
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '2'
+      upstream: ${{ needs.gate1.result }}
+  gate3:
+    needs: gate2
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '3'
+      upstream: ${{ needs.gate2.result }}
+  gate4:
+    needs: gate3
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '4'
+      upstream: ${{ needs.gate3.result }}
+  gate5:
+    needs: gate4
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '5'
+      upstream: ${{ needs.gate4.result }}
+  gate6:
+    needs: gate5
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '6'
+      upstream: ${{ needs.gate5.result }}
+  gate7:
+    needs: gate6
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '7'
+      upstream: ${{ needs.gate6.result }}
+  gate8:
+    needs: gate7
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '8'
+      upstream: ${{ needs.gate7.result }}
+  gate9:
+    needs: gate8
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '9'
+      upstream: ${{ needs.gate8.result }}
+  gate10:
+    needs: gate9
+    if: always()
+    uses: ./.github/workflows/gate-check.yml
+    with:
+      gate: '10'
+      upstream: ${{ needs.gate9.result }}

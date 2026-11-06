@@ -3,6 +3,21 @@ START=99
 STOP=10
 USE_PROCD=1
 extra_command "connect" "Validate and activate the selected profile"
+extra_command "validate" "Validate an uncommitted profile"
+
+validate_config() (
+	exec 9>/var/lock/vless-lite-check.lock
+	flock -n 9 || return 1
+	VLESS_LITE_LINK="$1" /usr/bin/xray-lite manager render /etc/vless-lite/config.json "$2" "$3" > "$4" 2>/dev/null &&
+		/usr/bin/xray-lite run -test -format json -config "$4" >/dev/null 2>&1
+)
+
+validate() (
+	umask 077
+	tmp=$(mktemp /tmp/vless-lite-validate.XXXXXX) || exit 1
+	trap 'rm -f "$tmp"' EXIT
+	validate_config "$VLESS_LITE_LINK" "$1" "$2" "$tmp"
+)
 
 boot() {
 	config_load vless-lite
@@ -11,6 +26,7 @@ boot() {
 }
 
 prepare_config() {
+	local tmp link resolver rules
 	config_load vless-lite
 	config_get active main active
 	config_get resolver main resolver 1.1.1.1
@@ -22,15 +38,9 @@ prepare_config() {
 	umask 077
 	mkdir -p /var/run/vless-lite || return 1
 	tmp=$(mktemp /var/run/vless-lite/config.XXXXXX) || return 1
-	if ! VLESS_LITE_LINK="$link" /usr/bin/xray-lite manager render /etc/vless-lite/config.json "$resolver" "$rules" > "$tmp" ||
-	   ! /usr/bin/xray-lite run -test -format json -config "$tmp" >/dev/null; then
+	if ! validate_config "$link" "$resolver" "$rules" "$tmp"; then
 		rm -f "$tmp"
 		logger -t vless-lite 'Profile or routing configuration failed validation'
-		return 1
-	fi
-	if ! /usr/share/vless-lite/firewall apply; then
-		rm -f "$tmp"
-		logger -t vless-lite 'Could not install interception rules'
 		return 1
 	fi
 	config=/var/run/vless-lite/config.json
@@ -53,9 +63,8 @@ start_service() {
 	}
 	procd_open_instance
 	procd_set_param env GOGC=50 GOMEMLIMIT=24MiB
-	procd_set_param command /usr/bin/xray-lite run -config "$config"
+	procd_set_param command /usr/share/vless-lite/run "$config" "$active"
 	procd_set_param file "$config"
-	procd_set_param data profile="$active"
 	procd_set_param respawn 3600 5 5
 	procd_set_param stdout 1
 	procd_set_param stderr 1
@@ -65,4 +74,3 @@ start_service() {
 stop_service() {
 	/usr/share/vless-lite/firewall remove
 }
-

@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=vless-lite
 PKG_VERSION:=0.2.0
-PKG_RELEASE:=1
+PKG_RELEASE:=3
 PKG_LICENSE:=MPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
@@ -19,7 +19,7 @@ define Package/vless-lite-manager
   CATEGORY:=Network
   TITLE:=VLESS Lite LuCI manager
   PKGARCH:=all
-  DEPENDS:=+vless-lite-core +firewall4 +luci-base +rpcd +jsonfilter +flock
+  DEPENDS:=+vless-lite-core +firewall4 +luci-base +rpcd +flock
 endef
 
 define Package/vless-lite-manager/conffiles
@@ -55,14 +55,11 @@ define Package/vless-lite-manager/install
 	$(INSTALL_BIN) ./files/etc/init.d/vless-lite $(1)/etc/init.d/
 	$(INSTALL_DATA) ./files/etc/vless-lite/config.json $(1)/etc/vless-lite/
 	$(INSTALL_BIN) ./files/usr/libexec/rpcd/vless-lite $(1)/usr/libexec/rpcd/
-	$(INSTALL_BIN) ./files/usr/share/vless-lite/firewall $(1)/usr/share/vless-lite/
+	$(INSTALL_BIN) ./files/usr/share/vless-lite/firewall ./files/usr/share/vless-lite/run $(1)/usr/share/vless-lite/
 	$(INSTALL_DATA) ./files/usr/share/rpcd/acl.d/*.json $(1)/usr/share/rpcd/acl.d/
 	$(INSTALL_DATA) ./files/usr/share/luci/menu.d/*.json $(1)/usr/share/luci/menu.d/
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/vless-lite/settings.js $(1)/www/luci-static/resources/view/vless-lite/
-	$(INSTALL_DIR) $(1)/www/moci/js/addons/vless-lite
-	$(INSTALL_DATA) ./files/www/moci/js/addons/vless-lite/addon.js ./files/www/moci/js/addons/vless-lite/manifest.json $(1)/www/moci/js/addons/vless-lite/
 endef
 
 $(eval $(call BuildPackage,vless-lite-core))
 $(eval $(call BuildPackage,vless-lite-manager))
-
