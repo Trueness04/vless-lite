@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
 const [gate, upstream = 'success'] = process.argv.slice(2);
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
@@ -8,9 +8,13 @@ const rows = [];
 const add = (test, expected, actual, status, evidence, reason = '') =>
     rows.push({ gate, test, expected, actual, status, evidence, commit, reason });
 
+const criteria = JSON.parse(readFileSync(new URL('./gate-criteria.json', import.meta.url), 'utf8'))[gate];
+if (!criteria) throw new Error('Unknown gate');
 mkdirSync('gate-evidence', { recursive: true });
 if (upstream !== 'success') {
-    add('prerequisite', 'Previous gate passed', upstream, 'BLOCKED', 'GitHub Actions dependency', 'Previous gate did not pass');
+    for (const criterion of criteria) {
+        add(criterion.test, criterion.expected, upstream, 'BLOCKED', 'GitHub Actions dependency', 'Previous gate did not pass');
+    }
 } else if (gate === '0') {
     const files = git('ls-files');
     const refs = git('for-each-ref', '--format=%(objectname) %(refname)');
@@ -26,9 +30,9 @@ if (upstream !== 'success') {
     writeFileSync('gate-evidence/operation-paths.txt', operations + '\n');
     add('inventory', 'List tracked files, refs and commits', 'Inventory generated', 'PASS', 'repository-inventory.json');
     add('operations', 'List tracked deployment and flash references', 'Candidate files enumerated', 'PASS', 'operation-paths.txt');
-    add('audit', 'Review all historical refs, dependencies and secret exposure', 'Complete review evidence unavailable', 'NOT TESTED', 'repository-inventory.json');
+    for (const criterion of criteria) add(criterion.test, criterion.expected, 'Complete evidence unavailable', 'NOT TESTED', 'RECOVERY.md');
 } else {
-    add('acceptance', 'All mandatory criteria have executable evidence', 'Full evidence unavailable', 'NOT TESTED', 'RECOVERY.md');
+    for (const criterion of criteria) add(criterion.test, criterion.expected, 'Complete evidence unavailable', 'NOT TESTED', 'RECOVERY.md');
 }
 writeFileSync('gate-evidence/result.json', JSON.stringify(rows, null, 2) + '\n');
 if (rows.some(row => row.status !== 'PASS')) process.exitCode = 1;
