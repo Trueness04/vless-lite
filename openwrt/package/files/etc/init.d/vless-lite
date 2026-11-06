@@ -26,6 +26,7 @@ boot() {
 }
 
 prepare_config() {
+	local tmp link resolver rules
 	config_load vless-lite
 	config_get active main active
 	config_get resolver main resolver 1.1.1.1
