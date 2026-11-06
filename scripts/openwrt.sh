@@ -68,7 +68,7 @@ else
     offset=$(sed -n 's/^squashfs_offset_bytes=//p' "$root/artifacts/flash-budget.txt")
     unsquashfs -o "$offset" -cat "$image" www/index.html | grep -F 'location.replace' | grep -Fq '/moci/'
     listing=$(unsquashfs -o "$offset" -ll "$image")
-    for entry in usr/bin/xray-lite usr/libexec/rpcd/vless-lite www/moci/index.html www/cgi-bin/luci; do
+    for entry in usr/bin/xray-lite usr/libexec/rpcd/vless-lite www/moci/index.html www/moci/js/addons/vless-lite/addon.js www/moci/js/addons/vless-lite/manifest.json www/cgi-bin/luci; do
         grep -Fq "squashfs-root/$entry" <<< "$listing"
     done
     factory=${image%-sysupgrade.bin}-factory.bin
