@@ -71,6 +71,7 @@ else
     test -s "$factory"
     test "$(stat -c %s "$factory")" -le $((15872*1024))
     printf 'factory_bytes=%s\n' "$(stat -c %s "$factory")" >> "$root/artifacts/flash-budget.txt"
+    test "$(stat -c %s "$factory")" -le $((12*1024*1024))
     printf '%s\n' "$listing" > "$root/artifacts/rootfs-files.txt"
     cp .config "$root/artifacts/build.config"
     manifest=$(find bin/targets/ath79/tiny -maxdepth 1 -name '*.manifest' -print -quit)
