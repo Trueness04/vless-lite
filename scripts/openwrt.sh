@@ -59,6 +59,7 @@ else
     node "$root/scripts/flash-budget.mjs" "$image" | tee "$root/artifacts/flash-budget.txt"
     offset=$(sed -n 's/^squashfs_offset_bytes=//p' "$root/artifacts/flash-budget.txt")
     listing=$(unsquashfs -o "$offset" -ll "$image")
+    if grep -Fq squashfs-root/www/moci <<< "$listing"; then exit 1; fi
     for entry in usr/bin/xray-lite usr/libexec/rpcd/vless-lite www/cgi-bin/luci www/luci-static/bootstrap/cascade.css www/luci-static/resources/view/network/wireless.js www/luci-static/resources/view/vless-lite/settings.js; do
         grep -Fq "squashfs-root/$entry" <<< "$listing"
     done
@@ -68,4 +69,3 @@ else
     cp "$image" "$factory" "$root/artifacts/"
 fi
 (cd "$root/artifacts" && find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS)
-

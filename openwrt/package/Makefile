@@ -55,7 +55,7 @@ define Package/vless-lite-manager/install
 	$(INSTALL_BIN) ./files/etc/init.d/vless-lite $(1)/etc/init.d/
 	$(INSTALL_DATA) ./files/etc/vless-lite/config.json $(1)/etc/vless-lite/
 	$(INSTALL_BIN) ./files/usr/libexec/rpcd/vless-lite $(1)/usr/libexec/rpcd/
-	$(INSTALL_BIN) ./files/usr/share/vless-lite/firewall $(1)/usr/share/vless-lite/
+	$(INSTALL_BIN) ./files/usr/share/vless-lite/firewall ./files/usr/share/vless-lite/run $(1)/usr/share/vless-lite/
 	$(INSTALL_DATA) ./files/usr/share/rpcd/acl.d/*.json $(1)/usr/share/rpcd/acl.d/
 	$(INSTALL_DATA) ./files/usr/share/luci/menu.d/*.json $(1)/usr/share/luci/menu.d/
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/vless-lite/settings.js $(1)/www/luci-static/resources/view/vless-lite/
@@ -63,4 +63,3 @@ endef
 
 $(eval $(call BuildPackage,vless-lite-core))
 $(eval $(call BuildPackage,vless-lite-manager))
-

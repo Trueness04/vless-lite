@@ -28,11 +28,6 @@ prepare_config() {
 		logger -t vless-lite 'Profile or routing configuration failed validation'
 		return 1
 	fi
-	if ! /usr/share/vless-lite/firewall apply; then
-		rm -f "$tmp"
-		logger -t vless-lite 'Could not install interception rules'
-		return 1
-	fi
 	config=/var/run/vless-lite/config.json
 	mv -f "$tmp" "$config"
 }
@@ -53,7 +48,7 @@ start_service() {
 	}
 	procd_open_instance
 	procd_set_param env GOGC=50 GOMEMLIMIT=24MiB
-	procd_set_param command /usr/bin/xray-lite run -config "$config"
+	procd_set_param command /usr/share/vless-lite/run "$config"
 	procd_set_param file "$config"
 	procd_set_param data profile="$active"
 	procd_set_param respawn 3600 5 5
@@ -65,4 +60,3 @@ start_service() {
 stop_service() {
 	/usr/share/vless-lite/firewall remove
 }
-

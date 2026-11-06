@@ -3,7 +3,7 @@
 
 status() {
 	local pid rss memory profile
-	pid=$(ubus call service list '{"name":"vless-lite","verbose":true}' | jsonfilter -e '@["vless-lite"].instances.instance1.pid')
+	pid=$(cat /var/run/vless-lite/core.pid 2>/dev/null)
 	profile=$(ubus call service list '{"name":"vless-lite","verbose":true}' | jsonfilter -e '@["vless-lite"].instances.instance1.data.profile')
 	rss=0
 	case "$pid" in
@@ -48,4 +48,3 @@ case "$1:$2" in
 	*) exit 1 ;;
 esac
 json_dump
-
