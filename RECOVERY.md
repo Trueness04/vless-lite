@@ -26,3 +26,7 @@ After an independently approved boot, collect the following using the device con
     ubus call vless-lite status
 
 The RootFS data region in the build report is a calculated partition capacity. Actual free space and core RAM usage require a booted device.
+
+## MIPS TLS crash disposition
+
+**NON-REPRODUCED** in GitHub Actions run 42191376832. Three runs passed in each cell of the standard versus no-inline compiler and HTTP versus HTTPS harness matrix. Go 1.26.10 and the pinned Xray source were held constant. The prior crypto/x509/pkix SIGSEGV remains an observed failure with unknown cause. The matrix does not establish a fix or substitute for hardware acceptance.
