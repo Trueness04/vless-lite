@@ -7,6 +7,7 @@
 'require ui';
 
 var calls = {};
+var commit = rpc.declare({ object: 'uci', method: 'commit', params: [ 'config' ], reject: true });
 [ 'status', 'logs', 'connect', 'disconnect', 'probe' ].forEach(function(method) {
 	calls[method] = rpc.declare({ object: 'vless-lite', method: method });
 });
@@ -77,15 +78,18 @@ return view.extend({
 				return refresh();
 			});
 		}
+		function save() {
+			return map.save().then(function() { return commit('vless-lite'); });
+		}
 
 		return Promise.all([ map.render(), refresh() ]).then(function(nodes) {
 			poll.add(refresh, 5);
 			return E('div', {}, [ nodes[0], status, E('div', {}, [
 				button(_('Save profiles and settings'), function() {
-					return map.save().then(function() { return uci.apply(); }).then(function() { window.location.reload(); });
+					return save().then(function() { window.location.reload(); });
 				}), ' ',
 				button(_('Save and connect'), function() {
-					return map.save().then(function() { return uci.apply(); }).then(function() { return control('connect'); });
+					return save().then(function() { return control('connect'); });
 				}), ' ',
 				button(_('Disconnect'), function() { return control('disconnect'); }), ' ',
 				button(_('Test active connection'), function() {

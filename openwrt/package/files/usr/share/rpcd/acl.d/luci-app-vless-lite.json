@@ -17,6 +17,9 @@
         "vless-lite"
       ],
       "ubus": {
+        "uci": [
+          "commit"
+        ],
         "vless-lite": [
           "connect",
           "disconnect",
