@@ -2,7 +2,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=vless-lite
 PKG_VERSION:=0.2.0
-PKG_RELEASE:=2
+PKG_RELEASE:=3
 PKG_LICENSE:=MPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
@@ -19,7 +19,7 @@ define Package/vless-lite-manager
   CATEGORY:=Network
   TITLE:=VLESS Lite LuCI manager
   PKGARCH:=all
-  DEPENDS:=+vless-lite-core +firewall4 +luci-base +rpcd +jsonfilter +flock
+  DEPENDS:=+vless-lite-core +firewall4 +luci-base +rpcd +flock
 endef
 
 define Package/vless-lite-manager/conffiles

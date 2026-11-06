@@ -123,6 +123,10 @@ try {
                 assert.equal(result.stdout, 'vless-lite-loopback');
             }
         }
+        const memory = await readFile(`/proc/${client.pid}/status`, 'utf8');
+        const peak = memory.match(/^VmHWM:\s+(\d+) kB/m);
+        assert.ok(peak, 'missing client peak RSS');
+        console.log(`${network}/${security} client process peak RSS: ${peak[1]} KiB (${runner || 'host'})`);
         client.kill();
         upstream.kill();
         console.log(network + '/' + security + ' VLESS via SOCKS5 and HTTP passed');

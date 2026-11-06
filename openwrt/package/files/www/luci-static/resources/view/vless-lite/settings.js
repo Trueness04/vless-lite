@@ -9,8 +9,10 @@
 var calls = {};
 var commit = rpc.declare({ object: 'uci', method: 'commit', params: [ 'config' ], reject: true });
 [ 'status', 'logs', 'connect', 'disconnect', 'probe' ].forEach(function(method) {
-	calls[method] = rpc.declare({ object: 'vless-lite', method: method });
+	calls[method] = rpc.declare({ object: 'vless-lite', method: method, reject: true });
 });
+calls.validate = rpc.declare({ object: 'vless-lite', method: 'validate',
+	params: [ 'link', 'resolver', 'rules' ], reject: true });
 
 return view.extend({
 	handleSave: null,
@@ -55,6 +57,7 @@ return view.extend({
 		var status = E('p', {}, _('Loading status'));
 		var result = E('p', { 'aria-live': 'polite' });
 		var log = E('pre', { style: 'white-space:pre-wrap' });
+		var busy = false;
 		function refresh() {
 			return calls.status().then(function(s) {
 				status.textContent = s.pid
@@ -66,8 +69,11 @@ return view.extend({
 		}
 		function button(title, action) {
 			return E('button', { 'class': 'cbi-button', 'click': ui.createHandlerFn(this, function() {
+				if (busy) return;
+				busy = true;
 				result.textContent = _('Working…');
-				return action().catch(function(e) { result.textContent = String(e); });
+				return action().catch(function(e) { result.textContent = String(e); })
+					.finally(function() { busy = false; });
 			}) }, title);
 		}
 		function control(method) {
@@ -78,8 +84,22 @@ return view.extend({
 				return refresh();
 			});
 		}
-		function save() {
-			return map.save().then(function() { return commit('vless-lite'); });
+		function save(connecting) {
+			return map.save(function() {
+				var selected = uci.get('vless-lite', 'main', 'active');
+				if (!selected) {
+					if (connecting || uci.get('vless-lite', 'main', 'boot') === '1')
+						throw new Error(_('Select a profile first.'));
+					return;
+				}
+				var shareLink = uci.get('vless-lite', selected, 'link');
+				if (!shareLink)
+					throw new Error(_('Select an existing profile or clear the selection before saving.'));
+				return calls.validate(shareLink, uci.get('vless-lite', 'main', 'resolver'),
+					uci.get('vless-lite', 'main', 'rules') || '').then(function(reply) {
+					if (!reply.ok) throw new Error(reply.error || _('Profile validation failed.'));
+				});
+			}, true).then(function() { return commit('vless-lite'); });
 		}
 
 		return Promise.all([ map.render(), refresh() ]).then(function(nodes) {
@@ -89,12 +109,12 @@ return view.extend({
 					return save().then(function() { window.location.reload(); });
 				}), ' ',
 				button(_('Save and connect'), function() {
-					return save().then(function() { return control('connect'); });
+					return save(true).then(function() { return control('connect'); });
 				}), ' ',
 				button(_('Disconnect'), function() { return control('disconnect'); }), ' ',
 				button(_('Test active connection'), function() {
 					return calls.probe().then(function(r) {
-						result.textContent = r.ok ? _('HTTPS round trip %d ms').format(r.latency_ms) : r.error;
+						result.textContent = r.ok ? _('Proxy test passed. HTTPS round trip %d ms').format(r.latency_ms) : r.error;
 					});
 				}), ' ',
 				button(_('Refresh status and logs'), function() {

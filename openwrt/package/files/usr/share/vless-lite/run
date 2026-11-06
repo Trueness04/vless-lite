@@ -29,7 +29,7 @@ for attempt in $(seq 1 30); do
 		END { exit !(proxy && dns_tcp && dns_udp) }
 	' /proc/net/tcp /proc/net/tcp6 /proc/net/udp /proc/net/udp6 2>/dev/null; then
 		"$firewall" apply
-		printf '%s\n' "$child" > "$pidfile"
+		printf '%s %s\n' "$child" "$2" > "$pidfile"
 		wait "$child"
 		exit
 	fi

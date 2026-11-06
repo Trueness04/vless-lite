@@ -13,7 +13,11 @@ jobs:
           cache: false
       - run: bash scripts/core.sh
       - run: bash scripts/test-core.sh
-      - run: node scripts/test-luci.mjs
+      - run: bash scripts/test-service.sh
+      - run: |
+          VLESS_TEST_CHROME="$(command -v google-chrome)"
+          export VLESS_TEST_CHROME
+          node scripts/test-luci.mjs
       - run: sudo bash scripts/test-firewall.sh
       - run: node scripts/loopback.mjs
       - run: sudo apt-get update && sudo apt-get install -y qemu-user
