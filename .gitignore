@@ -1,4 +1,5 @@
 /dist/
 /artifacts/
 /.build/
+/gate-evidence/
 

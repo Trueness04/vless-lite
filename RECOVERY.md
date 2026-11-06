@@ -30,3 +30,28 @@ The RootFS data region in the build report is a calculated partition capacity. A
 ## MIPS TLS crash disposition
 
 **NON-REPRODUCED** in GitHub Actions run 42191376832. Three runs passed in each cell of the standard versus no-inline compiler and HTTP versus HTTPS harness matrix. Go 1.26.10 and the pinned Xray source were held constant. The prior crypto/x509/pkix SIGSEGV remains an observed failure with unknown cause. The matrix does not establish a fix or substitute for hardware acceptance.
+
+## Gate 0 audit against 299cf61
+
+The review started from `299cf61dea884a50d6c27206a4ddac56afdd7d49`. The public heads were `main` and `engineering/layer-isolation`. The baseline inventory had 35 tracked paths, 38 distinct historical paths and 26 reachable commits. The Gate artifact records the checkout, refs, reachable commits and historical operation-keyword matches for each run.
+
+| Criterion | Evidence and remaining scope |
+|---|---|
+| 0.1 | Inventoried Git history and tracked files. Reviewed the four current workflow files, the project feed, declared runtime dependencies, SDK and Buildroot pins, Xray pin and build dependency list. A complete transitive dependency audit is open. |
+| 0.2 | Reviewed historical operation matches and the current workflows and shell entry points. Matches include SEAMA/sysupgrade artifact handling, keyword-search code and documented hardware instructions. The review identified no project script that invokes a remote router operation. The history scan is discovery evidence and relies on manual classification. |
+| 0.3 | Build workflows use GitHub-hosted Ubuntu, local network namespaces or QEMU. The only deploy-like step publishes GitHub release assets on version tags. The repository runner API returned zero self-hosted runners and repository defaults were read-only. GitHub Actions tags are currently accepted without SHA pinning, so action provenance remains open. |
+| 0.4 | GitHub repository metadata returned zero Actions secrets, Actions variables, environments, deploy keys and Dependabot secrets. Gitleaks v8.24.3 reported one historical generic-api-key match in `scripts/test-core.sh` at `4f9a575`. The match is the public REALITY key in a test fixture. This evidence covers scanned Git refs and repository metadata. |
+| 0.5 | The official 25.12.6 ath79/tiny release profile identifies D-Link DIR-869 A1 and mips_24kc. Gate CI compares the release profile with the checked-out image configuration. |
+| 0.6 | The pinned DTS identifies `dlink,dir-869-a1` and includes `qca9563_dlink_dir-8x9-a1.dtsi`. The include contains the partition layout and specifies firmware at `0x070000` with size `0xf80000`. Gate CI records the layout from the pinned source. |
+| 0.7 | The issue table above and the reliability register below capture known problems. |
+| 0.8 | Gate CI verifies the baseline ancestry and records the checkout commit and tree. |
+
+### Reliability register
+
+| Issue | Disposition and outstanding validation |
+|---|---|
+| Invalid selected profile overwrites healthy settings | Preflight runs before staging and committing VLESS settings. Browser tests use UCI and RPC doubles. The init test verifies an invalid candidate preserves the prior generated config using the real host Xray binary. |
+| Stale or wrong running profile | Ready PID and profile come from the same supervisor record. Actual procd replacement and asynchronous core failures after a successful commit still need a booted OpenWrt integration test. |
+| Proxy reachability reported as process readiness | Probe is independent of the running status. Offline proxy and RPC failure presentation are covered in Chrome with mocked ubus. |
+| Profile secrecy and RAM | Selected-profile preflight and probe serialize extra core processes. Rendered config files use restrictive modes and validation logs omit raw diagnostics. Live rpcd/ACL, persistent UCI file access and memory under concurrent production traffic need a booted OpenWrt test. |
+| MIPS SIGSEGV and physical acceptance | See the matrix above. Hardware Wi-Fi, overlay, fail-open behavior and recovery remain unverified. |
