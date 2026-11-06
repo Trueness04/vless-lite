@@ -127,10 +127,11 @@ func renderProfile(template, link, resolver, rules string) (map[string]any, erro
 	switch security {
 	case "none":
 	case "tls":
-		if q.Get("sni") == "" {
-			return nil, errors.New("TLS requires an explicit SNI")
+		serverName := q.Get("sni")
+		if serverName == "" {
+			serverName = host
 		}
-		settings := map[string]any{"serverName": q.Get("sni")}
+		settings := map[string]any{"serverName": serverName}
 		if fp := q.Get("fp"); fp != "" {
 			settings["fingerprint"] = fp
 		}
