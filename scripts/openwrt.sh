@@ -34,7 +34,7 @@ case "$mode" in
 esac
 cp "$root/openwrt/feeds.conf" feeds.conf
 ./scripts/feeds update -a
-./scripts/feeds install -a
+./scripts/feeds install luci-light
 mkdir -p package/vless-lite package/moci
 cp -R "$root/openwrt/package/." package/vless-lite/
 install -Dm755 "$root/dist/xray-lite" package/vless-lite/files/usr/bin/xray-lite
