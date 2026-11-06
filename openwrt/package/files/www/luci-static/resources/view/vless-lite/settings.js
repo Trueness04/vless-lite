@@ -1,6 +1,7 @@
 'use strict';
 'require view';
 'require form';
+'require poll';
 'require rpc';
 'require uci';
 'require ui';
@@ -44,6 +45,7 @@ return view.extend({
 		var link = profiles.option(form.Value, 'link', _('VLESS share link'));
 		link.password = true;
 		link.rmempty = false;
+		link.description = _('Supported transports: RAW (TCP) and XHTTP. Supported security: TLS and REALITY.');
 		link.validate = function(section, value) {
 			return /^vless:\/\/[^\s]+$/.test(value) && value.length <= 4096
 				? true : _('Enter a VLESS share link');
@@ -56,7 +58,9 @@ return view.extend({
 			return calls.status().then(function(s) {
 				status.textContent = s.pid
 					? _('Running profile %s, PID %d, RSS %d KiB, system available %d KiB').format(s.profile || '?', s.pid, s.rss_kib, s.available_kib)
-					: _('Stopped, system available %d KiB').format(s.available_kib || 0);
+					: _('Core not ready, system available %d KiB').format(s.available_kib || 0);
+			}).catch(function() {
+				status.textContent = _('Could not load status');
 			});
 		}
 		function button(title, action) {
@@ -67,14 +71,15 @@ return view.extend({
 		}
 		function control(method) {
 			return calls[method]().then(function(r) {
-				result.textContent = r.ok ? _('Request accepted') : (r.error || _('Operation failed'));
+				result.textContent = r.ok
+					? (method === 'connect' ? _('Start requested. Check core status, then test the connection.') : _('Stop requested.'))
+					: (r.error || _('Operation failed'));
 				return refresh();
 			});
 		}
 
-		return Promise.all([ map.render(), refresh().catch(function() {
-			status.textContent = _('Could not load status');
-		}) ]).then(function(nodes) {
+		return Promise.all([ map.render(), refresh() ]).then(function(nodes) {
+			poll.add(refresh, 5);
 			return E('div', {}, [ nodes[0], status, E('div', {}, [
 				button(_('Save profiles and settings'), function() {
 					return map.save().then(function() { return uci.apply(); }).then(function() { window.location.reload(); });

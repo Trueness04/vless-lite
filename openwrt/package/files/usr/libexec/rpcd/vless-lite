@@ -8,7 +8,10 @@ status() {
 	rss=0
 	case "$pid" in
 		''|*[!0-9]*) pid=0 ;;
-		*) rss=$(awk '/^VmRSS:/ {print $2}' "/proc/$pid/status" 2>/dev/null) ;;
+		*)
+			rss=$(awk '/^Name:/ { core = ($2 == "xray-lite") } /^VmRSS:/ && core {print $2}' "/proc/$pid/status" 2>/dev/null)
+			[ -n "$rss" ] || pid=0
+			;;
 	esac
 	memory=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo)
 	json_add_int pid "${pid:-0}"
