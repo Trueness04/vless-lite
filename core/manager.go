@@ -48,6 +48,26 @@ func manage(args []string) error {
 	return json.NewEncoder(os.Stdout).Encode(config)
 }
 
+func validEndpoint(host string) bool {
+	if ip, err := netip.ParseAddr(host); err == nil {
+		return ip.Zone() == ""
+	}
+	if len(host) == 0 || len(host) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(host, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, char := range label {
+			if !(char >= 'a' && char <= 'z' || char >= '0' && char <= '9' || char == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func renderProfile(template, link, resolver, rules string) (map[string]any, error) {
 	if len(link) > 4096 || len(rules) > 8192 {
 		return nil, errors.New("profile or routing rules exceed their size limit")
@@ -61,10 +81,10 @@ func renderProfile(template, link, resolver, rules string) (map[string]any, erro
 	if _, err = uuid.ParseString(id); err != nil || len(id) != 36 || hasPassword {
 		return nil, errors.New("VLESS link requires a UUID")
 	}
-	host, err := netip.ParseAddr(u.Hostname())
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	port, portErr := strconv.ParseUint(u.Port(), 10, 16)
-	if err != nil || !host.Is4() || portErr != nil || port == 0 {
-		return nil, errors.New("use an IPv4 server address and explicit port")
+	if !validEndpoint(host) || portErr != nil || port == 0 {
+		return nil, errors.New("use an IP address or DNS hostname and explicit port")
 	}
 	dns, err := netip.ParseAddr(resolver)
 	if err != nil || !dns.Is4() || !dns.IsGlobalUnicast() {
@@ -172,7 +192,7 @@ func renderProfile(template, link, resolver, rules string) (map[string]any, erro
 	}
 	dnsSettings["address"] = dns.String()
 	outbounds[0] = map[string]any{"tag": "proxy", "protocol": "vless", "streamSettings": stream,
-		"settings": map[string]any{"vnext": []any{map[string]any{"address": host.String(), "port": port,
+		"settings": map[string]any{"vnext": []any{map[string]any{"address": host, "port": port,
 			"users": []any{map[string]any{"id": id, "flow": flow, "encryption": "none"}}}}}}
 
 	entries := []any{map[string]any{"type": "field", "inboundTag": []string{"dns"}, "outboundTag": "proxy"}}
