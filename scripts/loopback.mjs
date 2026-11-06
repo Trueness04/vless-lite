@@ -106,8 +106,10 @@ try {
             }],
         });
         for (const url of [`socks5h://${local}:${socks}`, `http://${local}:${proxy}`]) {
-            const result = await run('curl', ['-fsS', '--max-time', '5', '--noproxy', '', '--proxy', url, `http://${local}:${target}/`]);
-            assert.equal(result.stdout, 'vless-lite-loopback');
+            for (let connection = 0; connection < 10; connection++) {
+                const result = await run('curl', ['-fsS', '--max-time', '5', '--noproxy', '', '--proxy', url, `http://${local}:${target}/`]);
+                assert.equal(result.stdout, 'vless-lite-loopback');
+            }
         }
         client.kill();
         upstream.kill();

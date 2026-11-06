@@ -34,7 +34,7 @@ The default outbound is VLESS. Routing rules accept one action and IPv4 CIDR per
 
 ## Build and release
 
-Run on GitHub Actions or an x86-64 Linux filesystem with Go 1.27.0, Node.js and the packages listed in the workflow. Docker is optional.
+Run on GitHub Actions or an x86-64 Linux filesystem with Go 1.26.10, Node.js and the packages listed in the workflow. Docker is optional.
 
 ```sh
 bash scripts/core.sh
