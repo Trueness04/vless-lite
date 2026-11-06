@@ -51,7 +51,7 @@ if [[ $mode == sdk ]]; then
 fi
 if [[ $mode == firmware ]]; then mv .vless-config .config; fi; make defconfig
 if [[ $mode == sdk ]]; then
-    make -j"${JOBS:-2}" package/vless-lite/compile package/moci/compile V=s
+    for package_dir in package/vless-lite package/moci; do make -C "$package_dir" TOPDIR="$PWD" SDK=1 V=s compile; done
     find bin -type f \( -name 'vless-lite-*.apk' -o -name 'moci-*.apk' \) -exec cp {} "$root/artifacts/" \;
     for package in vless-lite-core vless-lite-manager moci; do
         compgen -G "$root/artifacts/$package-*.apk"
