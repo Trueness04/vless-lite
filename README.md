@@ -17,7 +17,7 @@ Development build for `ath79/tiny`, board `dlink,dir-869-a1`, and package archit
 
 - **VLESS Lite Core** uses the official Xray v26.6.1 source with a compile-time patch. It includes the profile renderer and HTTPS probe commands so the target does not need another standalone Go binary.
 - **VLESS Lite Manager** is an independent OpenWrt package with a LuCI view, UCI profile storage, authenticated rpcd methods, procd and nftables integration.
-- **Firmware** includes both packages, LuCI, MoCI and the upstream Ethernet, Wi-Fi and firewall packages. The root index opens `/moci/`. The VLESS Lite controls are under LuCI → Services at `/cgi-bin/luci/`.
+- **Firmware** includes both packages, standard LuCI Bootstrap and the upstream Ethernet, Wi-Fi and firewall packages. The VLESS Lite controls are under LuCI → Services at `/cgi-bin/luci/`.
 
 The production dependency check rejects VMess, Trojan, Shadowsocks, gRPC, KCP and other removed packages. XHTTP uses shared upstream QUIC, browser-dialer and congestion-control code. [Official Xray source](https://github.com/XTLS/Xray-core/tree/v26.6.1) · [MoCI](https://github.com/HudsonGraeme/moci#features)
 
@@ -28,9 +28,9 @@ The production dependency check rejects VMess, Trojan, Shadowsocks, gRPC, KCP an
 3. Use **Test active connection** for an HTTPS request through the running proxy. It reports elapsed request time, including handshake time. **Refresh status and logs** reports the running profile, PID, RSS, system available RAM and recent service messages.
 4. **Disconnect** stops the service and removes interception.
 
-Use a literal server IPv4 address and an explicit port. Use the provider's SNI for TLS and REALITY. Hostname endpoints, XHTTP extra JSON and custom certificate pinning in share links are outside the current importer. TLS verifies certificates. Runtime JSON lives in `/var/run/vless-lite` and is readable by root. UCI saves the profiles and policies.
+Use an IP address or DNS hostname and an explicit port. Use the provider's SNI for TLS and REALITY. XHTTP extra JSON and custom certificate pinning in share links are outside the current importer. TLS verifies certificates. Runtime JSON lives in `/var/run/vless-lite` and is readable by root. UCI saves the profiles and policies.
 
-The default outbound is VLESS. Routing rules accept one action and IPv4 CIDR per line, such as `block 203.0.113.0/24`, with first match winning. DNS is forced through the VLESS outbound ahead of custom rules. The interception policy applies to the stock `br-lan` bridge. It intercepts IPv4 TCP and port 53 DNS over TCP and UDP, and blocks forwarding from that bridge, including IPv6 and other UDP. Router-originated traffic and other bridges are outside this policy. LAN-local traffic and management stay reachable. Flow offloading must be disabled.
+The default outbound is VLESS. Routing rules accept one action and IPv4 CIDR per line, such as `block 203.0.113.0/24`, with first match winning. DNS is forced through the VLESS outbound ahead of custom rules. The interception policy applies to the stock `br-lan` bridge. It intercepts IPv4 TCP and port 53 DNS over TCP and UDP, while IPv6 and non-DNS UDP remain direct. Router-originated traffic and other bridges are outside this policy. LAN-local traffic and management stay reachable. Flow offloading must be disabled.
 
 ## Build and release
 
@@ -45,7 +45,7 @@ JOBS=4 bash scripts/openwrt.sh sdk
 JOBS=4 bash scripts/openwrt.sh firmware
 ```
 
-The SDK job emits core, manager and MoCI APKs. The Buildroot job places the core in SquashFS. The standalone core APK needs at least 26 MiB writable space at installation, so the DIR-869 A1 uses the built-in core. The firmware job checks the actual SEAMA sysupgrade image against the 12 MiB target, finds the SquashFS superblock, calculates the erase-aligned rootfs_data region, and checks that the expected files and MoCI redirect are present. Real usable Overlay is measured on the running device with `df -k /overlay`.
+The SDK job emits core and manager APKs. The Buildroot job places the core in SquashFS. The standalone core APK needs at least 26 MiB writable space at installation, so the DIR-869 A1 uses the built-in core. The firmware job checks the actual SEAMA sysupgrade image against the 12 MiB target, finds the SquashFS superblock, calculates the erase-aligned rootfs_data region, and checks that the expected LuCI files are present and MoCI is absent. Real usable Overlay is measured on the running device with `df -k /overlay`.
 
 A successful tag workflow publishes an experimental prerelease with checksums. The workflow's emulated MIPS tests exercise the core and do not establish Wi-Fi or memory stability on the physical router.
 
