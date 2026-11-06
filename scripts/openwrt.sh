@@ -31,19 +31,22 @@ case "$mode" in
         ;;
     *) exit 2 ;;
 esac
+feed="$root/.build/project-feed"
+mkdir -p "$feed/vless-lite"
+cp -R "$root/openwrt/package/." "$feed/vless-lite/"
+install -Dm755 "$root/dist/xray-lite" "$feed/vless-lite/files/usr/bin/xray-lite"
+install -Dm644 "$root/dist/Xray-LICENSE" "$feed/vless-lite/files/usr/share/licenses/xray-lite/LICENSE"
 cp "$root/openwrt/feeds.conf" feeds.conf
+printf 'src-link vlesslite %s\n' "$feed" >> feeds.conf
 ./scripts/feeds update -a
 ./scripts/feeds install luci
-mkdir -p package/vless-lite
-cp -R "$root/openwrt/package/." package/vless-lite/
-install -Dm755 "$root/dist/xray-lite" package/vless-lite/files/usr/bin/xray-lite
-install -Dm644 "$root/dist/Xray-LICENSE" package/vless-lite/files/usr/share/licenses/xray-lite/LICENSE
+./scripts/feeds install -p vlesslite vless-lite-core vless-lite-manager
 if [[ $mode == sdk ]]; then
     printf '%s\n' CONFIG_PACKAGE_vless-lite-core=m CONFIG_PACKAGE_vless-lite-manager=m >> .config
 fi
 if [[ $mode == firmware ]]; then mv .vless-config .config; fi; make defconfig
 if [[ $mode == sdk ]]; then
-    make -C package/vless-lite TOPDIR="$PWD" SDK=1 V=s compile
+    make -C package/feeds/vlesslite/vless-lite TOPDIR="$PWD" SDK=1 V=s compile
     find bin -type f -name 'vless-lite-*.apk' -exec cp {} "$root/artifacts/" \;
     for package in vless-lite-core vless-lite-manager; do
         compgen -G "$root/artifacts/$package-*.apk"
@@ -58,6 +61,7 @@ else
     test -n "$image"
     node "$root/scripts/flash-budget.mjs" "$image" | tee "$root/artifacts/flash-budget.txt"
     offset=$(sed -n 's/^squashfs_offset_bytes=//p' "$root/artifacts/flash-budget.txt")
+    bash "$root/scripts/check-runtime-packages.sh" "$image" "$offset" | tee "$root/artifacts/runtime-packages.txt"
     listing=$(unsquashfs -o "$offset" -ll "$image")
     if grep -Fq squashfs-root/www/moci <<< "$listing"; then exit 1; fi
     for entry in usr/bin/xray-lite usr/libexec/rpcd/vless-lite www/cgi-bin/luci www/luci-static/bootstrap/cascade.css www/luci-static/resources/view/network/wireless.js www/luci-static/resources/view/vless-lite/settings.js; do
@@ -71,6 +75,17 @@ else
     cp .config "$root/artifacts/build.config"
     manifest=$(find bin/targets/ath79/tiny -maxdepth 1 -name '*.manifest' -print -quit)
     test -n "$manifest"
+    for package in vless-lite-core vless-lite-manager; do
+        grep -Eq "^$package[[:space:]]+-[[:space:]]+" "$manifest"
+    done
+    if grep -Eq '^(git(-[^ ]+)?|golang(-[^ ]+)?|gcc(-[^ ]+)?|gdb(-[^ ]+)?|binutils(-[^ ]+)?|strace|make|cmake|ninja|ccache)[[:space:]]' "$manifest"; then
+        echo 'Development tools found in firmware package manifest' >&2
+        exit 1
+    fi
+    if grep -Eq 'squashfs-root/(usr/)?(bin|sbin)/(git|go|gofmt|gcc|g\+\+|gdb|strace|make|cmake|ninja)([[:space:]]|$)' <<< "$listing"; then
+        echo 'Development executables found in SquashFS' >&2
+        exit 1
+    fi
     cp "$manifest" "$root/artifacts/package.manifest"
     cp "$image" "$factory" "$root/artifacts/"
 fi
