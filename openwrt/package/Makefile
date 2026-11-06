@@ -59,8 +59,6 @@ define Package/vless-lite-manager/install
 	$(INSTALL_DATA) ./files/usr/share/rpcd/acl.d/*.json $(1)/usr/share/rpcd/acl.d/
 	$(INSTALL_DATA) ./files/usr/share/luci/menu.d/*.json $(1)/usr/share/luci/menu.d/
 	$(INSTALL_DATA) ./files/www/luci-static/resources/view/vless-lite/settings.js $(1)/www/luci-static/resources/view/vless-lite/
-	$(INSTALL_DIR) $(1)/www/moci/js/addons/vless-lite
-	$(INSTALL_DATA) ./files/www/moci/js/addons/vless-lite/addon.js ./files/www/moci/js/addons/vless-lite/manifest.json $(1)/www/moci/js/addons/vless-lite/
 endef
 
 $(eval $(call BuildPackage,vless-lite-core))
