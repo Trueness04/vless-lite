@@ -27,7 +27,8 @@ case "$mode" in
         cd openwrt
         test "$(git rev-parse HEAD)" = 64900e756efa667774214f9c6b17c113222e01f7
         grep -Fq 'TARGET_DEVICES += dlink_dir-869-a1' target/linux/ath79/image/tiny.mk
-        cp "$root/openwrt/dir-869.config" .config
+        sed 's/^CONFIG_TARGET_ath79_tiny_DEVICE_/CONFIG_TARGET_DEVICE_ath79_tiny_DEVICE_/' "$root/openwrt/dir-869.config" > .vless-config; printf '%s
+' CONFIG_TARGET_MULTI_PROFILE=y >> .vless-config
         install -Dm644 "$root/openwrt/root-index.html" files/www/index.html
         ;;
     *) exit 2 ;;
@@ -48,15 +49,15 @@ cp -R package/moci/moci package/moci/dist/
 if [[ $mode == sdk ]]; then
     printf '%s\n' CONFIG_PACKAGE_vless-lite-core=m CONFIG_PACKAGE_vless-lite-manager=m CONFIG_PACKAGE_moci=m >> .config
 fi
-make defconfig
+if [[ $mode == firmware ]]; then mv .vless-config .config; fi; make defconfig
 if [[ $mode == sdk ]]; then
-    make -j"${JOBS:-2}" package/vless-lite/compile package/moci/compile V=s
+    for package_dir in package/vless-lite package/moci; do make -C "$package_dir" TOPDIR="$PWD" SDK=1 V=s compile; done
     find bin -type f \( -name 'vless-lite-*.apk' -o -name 'moci-*.apk' \) -exec cp {} "$root/artifacts/" \;
     for package in vless-lite-core vless-lite-manager moci; do
         compgen -G "$root/artifacts/$package-*.apk"
     done
 else
-    grep -qx CONFIG_TARGET_ath79_tiny_DEVICE_dlink_dir-869-a1=y .config
+    grep -E '^(CONFIG_TARGET_DEVICE_ath79_tiny_DEVICE_dlink_dir-869-a1|CONFIG_PACKAGE_(vless-lite-core|vless-lite-manager|moci))=' .config; grep -qx CONFIG_TARGET_DEVICE_ath79_tiny_DEVICE_dlink_dir-869-a1=y .config
     grep -qx CONFIG_PACKAGE_vless-lite-core=y .config
     grep -qx CONFIG_PACKAGE_vless-lite-manager=y .config
     grep -qx CONFIG_PACKAGE_moci=y .config
