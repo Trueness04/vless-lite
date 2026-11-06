@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn, execFile } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import http from 'node:http';
+import https from 'node:https';
 import http2 from 'node:http2';
 import { createHash, generateKeyPairSync, X509Certificate } from 'node:crypto';
 import net from 'node:net';
@@ -15,7 +15,7 @@ const run = promisify(execFile);
 const tmp = await mkdtemp(path.join(os.tmpdir(), 'vless-lite-'));
 const children = [];
 let decoy;
-const server = http.createServer((_, response) => response.end('vless-lite-loopback'));
+let server;
 const local = '127.0.0.1';
 const base = JSON.parse(await readFile('openwrt/package/files/etc/vless-lite/config.json'));
 const id = base.outbounds[0].settings.vnext[0].users[0].id;
@@ -58,13 +58,15 @@ async function start(name, config) {
 }
 
 try {
-    const target = await listen(server);
     const keyPath = path.join(tmp, 'key.pem');
     const certPath = path.join(tmp, 'cert.pem');
     await run('go', ['run', './scripts/test-cert.go', certPath, keyPath]);
     const cert = await readFile(certPath);
+    const key = await readFile(keyPath);
+    server = https.createServer({ key, cert }, (_, response) => response.end('vless-lite-loopback'));
+    const target = await listen(server);
     const pin = createHash('sha256').update(new X509Certificate(cert).raw).digest('hex');
-    decoy = http2.createSecureServer({ key: await readFile(keyPath), cert, allowHTTP1: true });
+    decoy = http2.createSecureServer({ key, cert, allowHTTP1: true });
     decoy.on('request', (_, response) => response.end('decoy'));
     const decoyPort = await listen(decoy);
     const keys = generateKeyPairSync('x25519');
@@ -107,7 +109,7 @@ try {
         });
         for (const url of [`socks5h://${local}:${socks}`, `http://${local}:${proxy}`]) {
             for (let connection = 0; connection < 10; connection++) {
-                const result = await run('curl', ['-fsS', '--max-time', '5', '--noproxy', '', '--proxy', url, `http://${local}:${target}/`]);
+                const result = await run('curl', ['-fsS', '--max-time', '5', '--noproxy', '', '--proxy', url, '--cacert', certPath, `https://${local}:${target}/`]);
                 assert.equal(result.stdout, 'vless-lite-loopback');
             }
         }
@@ -123,7 +125,7 @@ try {
         }
     }
     if (decoy) decoy.close();
-    server.close();
+    if (server) server.close();
     await rm(tmp, { recursive: true, force: true });
 }
 
