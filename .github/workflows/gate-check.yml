@@ -1,0 +1,30 @@
+name: Gate evidence
+on:
+  workflow_call:
+    inputs:
+      gate:
+        type: string
+        required: true
+      upstream:
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  evaluate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - run: node scripts/gate-evidence.mjs "$GATE" "$UPSTREAM"
+        env:
+          GATE: ${{ inputs.gate }}
+          UPSTREAM: ${{ inputs.upstream }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate-${{ inputs.gate }}-evidence
+          path: gate-evidence/
+          if-no-files-found: error
